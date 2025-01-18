@@ -34,5 +34,5 @@ FROM nginx:mainline-alpine AS web
 RUN apk add --no-cache tzdata
 ENV TZ Europe/Amsterdam
 
-COPY --from=app /app/static /usr/share/nginx/html/static
+COPY --from=app /app/quepid_api/static /usr/share/nginx/html/static
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
