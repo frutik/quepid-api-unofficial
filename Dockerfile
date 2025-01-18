@@ -20,7 +20,7 @@ RUN pip install -r requirements.txt
 
 COPY . ./
 
-RUN ./manage.py collectstatic --noinput
+RUN ./quepid_api/manage.py collectstatic --noinput
 
 RUN chown -R www-data:www-data .
 
