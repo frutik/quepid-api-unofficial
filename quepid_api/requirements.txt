@@ -1,0 +1,6 @@
+uwsgi
+Django==4.2.18
+pytz
+psycopg2
+mysqlclient>=2.0.3
+django-ninja

@@ -1,0 +1,20 @@
+services:
+  quepid-api-app:
+    container_name: quepid-api-app
+    build:
+      context: ./quepid_api
+      dockerfile: ../Dockerfile
+      target: app
+    env_file:
+      - .env
+    environment:
+      DEBUG: 1
+    network_mode: service:quepid-api-web
+  quepid-api-web:
+    container_name: quepid-api-web
+    build:
+      context: ./quepid_api
+      dockerfile: ../Dockerfile
+      target: web
+    ports:
+      - '8081:80'
