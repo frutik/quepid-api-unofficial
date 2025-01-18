@@ -1,6 +1,6 @@
 FROM python:3.12 AS app
 
-WORKDIR /app/quepid_api
+WORKDIR /app
 
 ENV TMP_DIR=/tmp/app
 ENV TORCH_HOME=/tmp/app/torch
