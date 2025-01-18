@@ -82,11 +82,11 @@ DATABASES = {
     },
     'quepid': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'QUEPID_DB_NAME',
-        'USER': 'QUEPID_DB_USER',
-        'PASSWORD': 'QUEPID_DB_PASSSWORD',
-        'HOST': 'QUEPID_DB_HOST',
-        'PORT': 'QUEPID_DB_PORT',
+        'NAME': os.getenv('QUEPID_DB_NAME'),
+        'USER': os.getenv('QUEPID_DB_USER'),
+        'PASSWORD': os.getenv('QUEPID_DB_PASSSWORD'),
+        'HOST': os.getenv('QUEPID_DB_HOST'),
+        'PORT': os.getenv('QUEPID_DB_PORT'),
     }
 }
 
