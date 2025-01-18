@@ -1,0 +1,82 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unofficial-api
+  namespace: quepid
+  labels:
+    app: unofficial-api
+spec:
+  selector:
+    matchLabels:
+      app: unofficial-api
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: unofficial-api
+    spec:
+      containers:
+        - name: app
+          image: frutik777/quepid-api-unofficial:latest
+          command: ["/bin/sleep", "infinity"]
+#          ports:
+#            - containerPort: 3000
+          resources:
+            requests:
+              cpu: "550m"
+              memory: "550Mi"
+            limits:
+              cpu: "650m"
+              memory: "600Mi"
+          imagePullPolicy: Always
+          env:
+            - name: POSTGRES_SCHEMA
+              value: "public"
+            - name: POSTGRES_DB
+              value: "admin"
+            - name: POSTGRES_USER
+              value: "admin"
+            - name: POSTGRES_PASSWORD
+              value: "admin"
+            - name: POSTGRES_HOST
+              value: "localhost"
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: UWSGI_SOCKET
+              value: "127.0.0.1:8001"
+            - name: UWSGI_MASTER
+              value: "1"
+            - name: UWSGI_STATS
+              value: "127.0.0.1:9191"
+            - name: UWSGI_WSGI_FILE
+              value: "quepid_api/wsgi.py"
+            - name: UWSGI_CHDIR
+              value: "/app/"
+            - name: UWSGI_THREADS
+              value: "20"
+            - name: UWSGI_CHEAPER_ALGO
+              value: "spare"
+            - name: UWSGI_CHEAPER
+              value: "2"
+            - name: UWSGI_CHEAPER_INITIAL
+              value: "5"
+            - name: UWSGI_WORKERS
+              value: "1000"
+            - name: UWSGI_CHEAPER_STEP
+              value: "2"
+            - name: DJANGO_DEBUG
+              value: "1"
+            - name: DJANGO_SECRET
+              value: "qweasd"
+            - name: QUEPID_DB_NAME
+              value: "<quepid_db>"
+            - name: QUEPID_DB_USER
+              value: "admin"
+            - name: QUEPID_DB_PASSSWORD
+              value: "<password>"
+            - name: QUEPID_DB_HOST
+              value: "quepid_db.aws.local"
+            - name: QUEPID_DB_PORT
+              value: "3306"
+      restartPolicy: Always
