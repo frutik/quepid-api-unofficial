@@ -20,7 +20,7 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build --target app -f ../Dockerfile -t ${{ secrets.DOCKER_USERNAME }}/quepid-api-unofficial:${{ github.ref_name }} ./quepid_api
+          docker build --target app -t ${{ secrets.DOCKER_USERNAME }}/quepid-api-unofficial:${{ github.ref_name }} ./quepid_api
 
       - name: Push Docker image to Docker Hub
         run: |
