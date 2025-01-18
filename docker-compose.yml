@@ -1,6 +1,7 @@
 services:
   quepid-api-app:
     container_name: quepid-api-app
+    image: frutik777/quepid-api-unofficial
     build:
       context: ./quepid_api
       dockerfile: ../Dockerfile
@@ -12,6 +13,7 @@ services:
     network_mode: service:quepid-api-web
   quepid-api-web:
     container_name: quepid-api-web
+    image: frutik777/quepid-api-unofficial-web
     build:
       context: ./quepid_api
       dockerfile: ../Dockerfile
