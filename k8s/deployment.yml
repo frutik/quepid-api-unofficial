@@ -19,7 +19,6 @@ spec:
       containers:
         - name: app
           image: frutik777/quepid-api-unofficial:latest
-          command: ["/bin/sleep", "infinity"]
 #          ports:
 #            - containerPort: 3000
           resources:

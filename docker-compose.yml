@@ -2,6 +2,7 @@ services:
   quepid-api-app:
     container_name: quepid-api-app
     image: frutik777/quepid-api-unofficial
+    platform: linux/amd64
     build:
       context: ./quepid_api
       dockerfile: ../Dockerfile
@@ -14,6 +15,7 @@ services:
   quepid-api-web:
     container_name: quepid-api-web
     image: frutik777/quepid-api-unofficial-web
+    platform: linux/amd64
     build:
       context: ./quepid_api
       dockerfile: ../Dockerfile
