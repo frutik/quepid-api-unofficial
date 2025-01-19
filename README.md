@@ -13,7 +13,7 @@ vi .env
 docker compose up
 ```
 
-open in the brovser http://127.0.0.1/api/docs
+open in the browser http://127.0.0.1/api/docs
 
 please specify in `.env` correct connection parameters for quepid mysql database
 

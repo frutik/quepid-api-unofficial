@@ -32,3 +32,5 @@ stats
 /.gradle/
 .DS_Store
 .env
+./custom_helm_values.yaml
+
