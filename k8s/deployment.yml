@@ -30,18 +30,6 @@ spec:
               memory: "600Mi"
           imagePullPolicy: Always
           env:
-            - name: POSTGRES_SCHEMA
-              value: "public"
-            - name: POSTGRES_DB
-              value: "admin"
-            - name: POSTGRES_USER
-              value: "admin"
-            - name: POSTGRES_PASSWORD
-              value: "admin"
-            - name: POSTGRES_HOST
-              value: "localhost"
-            - name: POSTGRES_PORT
-              value: "5432"
             - name: UWSGI_SOCKET
               value: "127.0.0.1:8001"
             - name: UWSGI_MASTER
