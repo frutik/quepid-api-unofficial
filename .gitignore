@@ -32,4 +32,4 @@ stats
 /.gradle/
 .DS_Store
 .env
-./my_values.yml
+my_values.yml
