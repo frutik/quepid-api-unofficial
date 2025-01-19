@@ -2,13 +2,22 @@ from ninja import NinjaAPI
 
 from ninja import Schema
 from ninja import ModelSchema
+from ninja.security import HttpBearer
 
 import quepid.models as qmodels
 
 
+class AuthBearer(HttpBearer):
+    def authenticate(self, request, token):
+        return qmodels.ApiKeys.check_token(
+            bearer=request.headers.get('Authorization', 'Bearer 123')
+        )
+
+
 api = NinjaAPI(
     title="Quepid Custom API",
-    version="v1.1.0"
+    version="v1.1.0",
+    auth=AuthBearer()
 )
 
 

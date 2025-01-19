@@ -108,6 +108,14 @@ class ApiKeys(models.Model):
         managed = False
         db_table = 'api_keys'
 
+    @staticmethod
+    def check_token(bearer=None):
+        try:
+            token = bearer.split()[1]
+        except:
+            token = None
+        return token
+
 
 class ArInternalMetadata(models.Model):
     key = models.CharField(primary_key=True, max_length=255)
