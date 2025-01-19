@@ -20,24 +20,33 @@ please specify in `.env` correct connection parameters for quepid mysql database
 
 ## Deploy to Kubernetes
 
-For now, you need to edit `k8s/deployment.yml` to specify the correct 
-connection details for the Quepid MySQL database and 
-the desired version to deploy (e.g., v0.2.7). Once 
-updated, you can deploy the new version to your cluster.
-
-```
-kubectl apply -f k8s/deployment.yml
-```
-
-Or
+Create and edit variables specific for your environment (specify the correct 
+connection details for the Quepid MySQL)
 
 ```
 cp my_values.yml.example my_values.yml
 nano my_values.yml
 ```
 
+Generate Kubernetes manifests
+
+> Don't forget to specify desired version for deploy (e.g., `v0.2.7`)
+
+
 ```
-helm template charts/quepid-api-unofficial --set appVersion=v0.2.7 --values my_values.yml
+helm template charts/quepid-api-unofficial --set appVersion=v0.2.7 --values my_values.yml > manifests.yml
+```
+
+Review them
+
+```
+less manifests.yml
+```
+
+Deploy to your Kubernetes cluster
+
+```
+kubectl apply -f manifests.yml
 ```
 
 ## Auth
