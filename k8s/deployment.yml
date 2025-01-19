@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: app
-          image: frutik777/quepid-api-unofficial:latest
+          image: frutik777/quepid-api-unofficial:v0.2.7
 #          ports:
 #            - containerPort: 3000
           resources:
