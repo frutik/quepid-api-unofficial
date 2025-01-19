@@ -1,7 +1,7 @@
-from ninja import NinjaAPI
+import logging
 
-from ninja import Schema
-from ninja import ModelSchema
+from ninja import NinjaAPI
+from ninja import Schema, ModelSchema
 from ninja.security import HttpBearer
 
 import quepid.models as qmodels
@@ -13,6 +13,8 @@ class AuthBearer(HttpBearer):
             bearer=request.headers.get('Authorization', 'Bearer 123')
         )
 
+
+logger = logging.getLogger('')
 
 api = NinjaAPI(
     title="Quepid Custom API",
@@ -73,6 +75,7 @@ def view_case(request, id: int):
 
 @api.get("/query/{id}/", response={200: Query, 404: None}, tags=['Query management'])
 def view_query(request, id: int):
+    logger.info(request.auth)
     if q := qmodels.Queries.objects.none():
         return 200, {}
     return 404, None
