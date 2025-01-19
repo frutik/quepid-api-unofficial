@@ -30,6 +30,8 @@ spec:
               memory: "600Mi"
           imagePullPolicy: Always
           env:
+            - name: APP_VERSION
+              value: "v0.2.7"
             - name: UWSGI_SOCKET
               value: "127.0.0.1:8001"
             - name: UWSGI_MASTER

@@ -1,3 +1,4 @@
+import os
 import logging
 
 from ninja import NinjaAPI
@@ -23,7 +24,7 @@ logger = logging.getLogger('')
 
 api = NinjaAPI(
     title="Quepid Custom API",
-    version="v1.1.0",
+    version=os.getenv('APP_VERSION', 'vX.X.X'),
     auth=AuthBearer()
 )
 

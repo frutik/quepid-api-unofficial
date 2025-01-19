@@ -29,5 +29,5 @@ kubectl apply -f k8s/deployment.yml
 ## Auth
 
 This api uses the same Api tokens as an official API. So, in order
-to have access to endpoints, create API token as desribed in official 
-documentation and use that token to authorize requests.
+to have access to endpoints, create API token as described in the official 
+documentation and use that token to authorize your requests.
