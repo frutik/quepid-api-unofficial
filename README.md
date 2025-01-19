@@ -37,7 +37,7 @@ nano my_values.yml
 ```
 
 ```
-helm template quepid-api charts/quepid-api-unofficial --set appVersion=v0.2.7 --values my_values.yml
+helm template charts/quepid-api-unofficial --set appVersion=v0.2.7 --values my_values.yml
 ```
 
 ## Auth
