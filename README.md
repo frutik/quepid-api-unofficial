@@ -29,11 +29,12 @@ kubectl apply -f k8s/deployment.yml
 Or
 
 ```
+cp my_values.yml.example my_values.yml
 nano my_values.yml
 ```
 
 ```
-helm template frutik-quepid-api charts/quepid --values my_values.yml | kubectl apply -n quepid -f -
+helm template quepid-api charts/quepid-api-unofficial --set appVersion=v0.2.7 --values my_values.yml
 ```
 
 ## Auth

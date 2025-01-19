@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: o19s/quepid
+  repository: frutik777/quepid-api-unofficial
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: ""
