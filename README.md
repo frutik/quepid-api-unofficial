@@ -26,6 +26,16 @@ and desired version to deploy (i.e. `v0.2.7`). After that you can deploy new ver
 kubectl apply -f k8s/deployment.yml
 ```
 
+Or
+
+```
+nano my_values.yml
+```
+
+```
+helm template frutik-quepid-api charts/quepid --values my_values.yml | kubectl apply -n quepid -f -
+```
+
 ## Auth
 
 This api uses the same Api tokens as an official API. So, in order
