@@ -32,6 +32,8 @@ Generate Kubernetes manifests
 
 > Don't forget to specify desired version for deploy (e.g., `v0.2.7`)
 
+> checkout this repository first
+
 ```
 helm template charts/quepid-api-unofficial --set appVersion=v0.2.7 --values my_values.yml > manifests.yml
 ```
