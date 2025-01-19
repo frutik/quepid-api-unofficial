@@ -20,18 +20,17 @@ please specify in `.env` correct connection parameters for quepid mysql database
 
 ## Deploy to Kubernetes
 
-Create and edit variables specific for your environment (specify the correct 
+Create and edit a file with the variables specific for your environment (specify the correct 
 connection details for the Quepid MySQL)
 
 ```
 cp my_values.yml.example my_values.yml
-nano my_values.yml
+vi my_values.yml
 ```
 
 Generate Kubernetes manifests
 
 > Don't forget to specify desired version for deploy (e.g., `v0.2.7`)
-
 
 ```
 helm template charts/quepid-api-unofficial --set appVersion=v0.2.7 --values my_values.yml > manifests.yml
