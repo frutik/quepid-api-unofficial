@@ -36,8 +36,8 @@ Common labels
 {{- define "quepid_chart.labels" -}}
 helm.sh/chart: {{ include "quepid_chart.chart" . }}
 {{ include "quepid_chart.selectorLabels" . }}
-{{- if .Chart.AppVersion }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- if .Values.AppVersion }}
+app.kubernetes.io/version: {{ .Values.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}

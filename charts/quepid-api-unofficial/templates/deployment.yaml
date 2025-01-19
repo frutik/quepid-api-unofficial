@@ -1,13 +1,13 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "quepid_chart.fullname" . }}
-  namespace: quepid
+  name: {{ include "quepid_chart.name" . }}
+  namespace: {{ .Values.kubernetes.namespace }}
   labels:
     {{- include "quepid_chart.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
-  replicas: {{ .Values.replicaCount }}
+  replicas: {{ .Values.kubernetes.replicas }}
   {{- end }}
   selector:
     matchLabels:
@@ -29,7 +29,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
-        - name: {{ .Chart.Name }}
+        - name: api
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.appVersion | default .Chart.AppVersion }}"
@@ -62,16 +62,16 @@ spec:
             - name: UWSGI_CHEAPER_STEP
               value: "2"
             - name: DJANGO_DEBUG
-              value: "1"
+              value: "{{ .Values.django.debug }}"
             - name: DJANGO_SECRET
-              value: "qweasd"
+              value: "{{ .Values.django.secret }}"
             - name: QUEPID_DB_NAME
-              value: "<quepid_db>"
+              value: "{{ .Values.quepid.db.name }}"
             - name: QUEPID_DB_USER
-              value: "admin"
+              value: "{{ .Values.quepid.db.user }}"
             - name: QUEPID_DB_PASSSWORD
-              value: "<password>"
+              value: "{{ .Values.quepid.db.password }}"
             - name: QUEPID_DB_HOST
-              value: "quepid_db.aws.local"
+              value: "{{ .Values.quepid.db.host }}"
             - name: QUEPID_DB_PORT
-              value: "3306"
+              value: "{{ .Values.quepid.db.port }}"

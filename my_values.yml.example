@@ -1,14 +1,13 @@
-- name: DJANGO_DEBUG
-  value: "1"
-- name: DJANGO_SECRET
-  value: "<generate secure random long enough value>"
-- name: QUEPID_DB_NAME
-  value: "<quepid_db>"
-- name: QUEPID_DB_USER
-  value: "<user>"
-- name: QUEPID_DB_PASSSWORD
-  value: "<password>"
-- name: QUEPID_DB_HOST
-  value: "<db>"
-- name: QUEPID_DB_PORT
-  value: "3306"
+kubernetes:
+  replicas: 2
+  namespace: "quepid"
+django:
+  debug: "0"
+  secret: "<generate secure random long enough value>"
+quepid:
+  db:
+    name: "<quepid_db>"
+    user: "<user>"
+    password: "<password>"
+    host: "<db>"
+    port: "3306"
