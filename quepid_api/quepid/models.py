@@ -108,13 +108,14 @@ class ApiKeys(models.Model):
         managed = False
         db_table = 'api_keys'
 
-    @staticmethod
-    def check_token(bearer=None):
+    @classmethod
+    def check_token(cls, bearer=None):
         try:
-            token = bearer.split()[1]
+            return cls.objects\
+                .using('quepid')\
+                .get(token_digest=bearer.split()[1])
         except:
-            token = None
-        return token
+            pass
 
 
 class ArInternalMetadata(models.Model):
