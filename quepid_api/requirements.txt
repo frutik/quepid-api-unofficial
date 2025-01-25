@@ -4,3 +4,6 @@ pytz
 psycopg2
 mysqlclient>=2.0.3
 django-ninja
+pytest-playwright
+openai
+markdownify
