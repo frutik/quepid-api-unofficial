@@ -16,6 +16,8 @@ class SearchResult(BaseModel):
 
 class Search(BaseModel):
     query: str
+    page_size: Optional[int] = Field(description='Page size selected. If possible to identify from the content')
+    total_results: Optional[int] = Field(description='Total number of results for detected search query. If possible to identify from the content')
     results: List[SearchResult]
 
 
