@@ -41,6 +41,26 @@ class CreateQuery(Schema):
     query_options: dict = {}
 
 
+class OpenAiParams(Schema):
+    model: str = 'gpt-4o'
+    markdownify: bool = True
+
+
+class SiteParams(Schema):
+    user_agent: str = "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko)"
+    timeout: int = 180000
+    accept_cookies: str = None
+
+
+class UrlToCaseParams(Schema):
+    openai: OpenAiParams
+    web: SiteParams
+
+
+class HtmlToCaseParams(Schema):
+    openai: OpenAiParams
+
+
 @api.get("/scorer/{id}/", response={200: Scorer, 404: None}, tags=['Scorers management'])
 def view_scorer(request, id: int):
     if r := _by_pk(qmodels.Scorers, id):
@@ -82,38 +102,42 @@ def create_query(request, data: CreateQuery):
 def update_query(request, id: int):
     return 400, None
 
-os.environ["DEBUG"] = "playwright:*"
-
-DEFAULT_UA = "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko)"
-
 
 @api.post("/toolbox/url_to_case/", tags=['Toolbox'])
-def url_to_case(request, url: str, openai_key: str, timeout: int = 180000, ua: str = DEFAULT_UA):
+def url_to_case(request, url: str, openai_key: str, params: UrlToCaseParams):
     with sync_playwright() as p:
         logger.info('Launching browser')
         browser = p.chromium.launch(headless=True)
-        context = browser.new_context(user_agent=ua)
-        # use markdown
+        context = browser.new_context(user_agent=params.web.user_agent)
         page = context.new_page()
-        # page = browser.new_page()
-        page.set_default_timeout(timeout)
+        page.set_default_timeout(params.web.timeout)
         logger.info('Opening url')
         page.goto(url)
-        try:
-            page.click("text=Alles accepteren", timeout=5000)  # Adjust the selector based on the site
-            print("Accepted cookies!")
-        except:
-            print("No cookie consent dialog found!")
+        if accept_cookies := params.web.accept_cookies:
+            try:
+                page.click(f"text={accept_cookies}", timeout=5000)
+                logger.info('Accepted cookies!')
+            except:
+                logger.info('No cookie consent dialog found')
         logger.info('Getting content')
         c = page.content()
         browser.close()
     logger.info('Parsing')
-    return html_to_search(c[0:100000], api_key=openai_key)
+    # add tiktoken and check tokens number vs context size
+    return html_to_search(
+        c[0:100000],
+        api_key=openai_key,
+        markdownify=params.openai.markdownify,
+        model=params.openai.model
+    )
 
 
 @api.post("/toolbox/html_to_case/", tags=['Toolbox'])
-def html_to_case(request, openai_key: str, markdownify: bool = True, html: UploadedFile = File(...)):
-    # logger.info(html)
+def html_to_case(request, openai_key: str, params: HtmlToCaseParams, html: UploadedFile = File(...)):
     html = html.read().decode('utf-8')
-    # openai model
-    return html_to_search(html[0:100000], markdownify=markdownify, api_key=openai_key)
+    return html_to_search(
+        html[0:100000],
+        api_key=openai_key,
+        markdownify=params.openai.markdownify,
+        model=params.openai.model
+    )
