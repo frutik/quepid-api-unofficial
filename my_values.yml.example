@@ -1,6 +1,15 @@
 kubernetes:
   replicas: 2
   namespace: "quepid"
+uwsgi:
+  socket_host: "127.0.0.1"
+  socket_port: "8001"
+  threads: "20"
+  cheaper_algo: "spare"
+  cheaper: "2"
+  cheaper_initial: "5"
+  workers: "1000"
+  cheaper_step: "2"
 django:
   debug: "0"
   secret: "<generate secure random long enough value>"

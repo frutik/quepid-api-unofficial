@@ -35,12 +35,12 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.appVersion | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
-            - containerPort: {{ .Values.deployment.port }}
+            - containerPort: {{ .Values.uwsgi.socket_port }}
           env:
             - name: APP_VERSION
               value: "{{ .Values.appVersion | default .Chart.AppVersion }}"
             - name: UWSGI_SOCKET
-              value: "127.0.0.1:8001"
+              value: "{{ .Values.uwsgi.socket_host }}:{{ .Values.uwsgi.socket_port }}"
             - name: UWSGI_MASTER
               value: "1"
             - name: UWSGI_STATS
@@ -50,17 +50,17 @@ spec:
             - name: UWSGI_CHDIR
               value: "/app/"
             - name: UWSGI_THREADS
-              value: "20"
+              value: "{{ .Values.uwsgi.threads }}"
             - name: UWSGI_CHEAPER_ALGO
-              value: "spare"
+              value: "{{ .Values.uwsgi.cheaper_algo }}"
             - name: UWSGI_CHEAPER
-              value: "2"
+              value: "{{ .Values.uwsgi.cheaper }}"
             - name: UWSGI_CHEAPER_INITIAL
-              value: "5"
+              value: "{{ .Values.uwsgi.cheaper_initial }}"
             - name: UWSGI_WORKERS
-              value: "1000"
+              value: "{{ .Values.uwsgi.workers }}"
             - name: UWSGI_CHEAPER_STEP
-              value: "2"
+              value: "{{ .Values.uwsgi.cheaper_step }}"
             - name: DJANGO_DEBUG
               value: "{{ .Values.django.debug }}"
             - name: DJANGO_SECRET

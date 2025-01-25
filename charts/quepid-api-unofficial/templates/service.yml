@@ -9,7 +9,7 @@ metadata:
 spec:
   ports:
     - port: {{ .Values.service.port }}
-      targetPort: {{ .Values.deployment.port }}
+      targetPort: {{ .Values.uwsgi.socket_port }}
       protocol: TCP
       name: http
   selector:
