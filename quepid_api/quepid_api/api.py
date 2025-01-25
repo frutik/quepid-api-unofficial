@@ -48,6 +48,7 @@ class QuepidParams(Schema):
 class OpenAiParams(Schema):
     model: str = 'gpt-4o'
     markdownify: bool = True
+    max_characters: int = None
 
 
 class SiteParams(Schema):
@@ -126,24 +127,36 @@ def url_to_case(request, url: str, openai_key: str, params: UrlToCaseParams):
             except:
                 logger.info('No cookie consent dialog found')
         logger.info('Getting content')
-        c = page.content()
+        html = page.content()
         browser.close()
     logger.info('Parsing')
     # add tiktoken and check tokens number vs context size
-    return html_to_search(
-        c[0:100000],
+    if max_characters := params.openai.max_characters:
+        html = html[0:max_characters]
+    search_results = html_to_search(
+        html,
         api_key=openai_key,
         markdownify=params.openai.markdownify,
         model=params.openai.model
     )
+    if case_name := params.quepid.case:
+        # store to case
+        pass
+    return search_results
 
 
 @api.post("/toolbox/html_to_case/", tags=['Toolbox'])
 def html_to_case(request, openai_key: str, params: HtmlToCaseParams, html: UploadedFile = File(...)):
     html = html.read().decode('utf-8')
-    return html_to_search(
-        html[0:100000],
+    if max_characters := params.openai.max_characters:
+        html = html[0:max_characters]
+    search_results = html_to_search(
+        html,
         api_key=openai_key,
         markdownify=params.openai.markdownify,
         model=params.openai.model
     )
+    if case_name := params.quepid.case:
+        # store to case
+        pass
+    return search_results
