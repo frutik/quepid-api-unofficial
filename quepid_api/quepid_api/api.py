@@ -41,6 +41,10 @@ class CreateQuery(Schema):
     query_options: dict = {}
 
 
+class QuepidParams(Schema):
+    case: str = 'Case Name'
+
+
 class OpenAiParams(Schema):
     model: str = 'gpt-4o'
     markdownify: bool = True
@@ -55,10 +59,12 @@ class SiteParams(Schema):
 class UrlToCaseParams(Schema):
     openai: OpenAiParams
     web: SiteParams
+    quepid: QuepidParams
 
 
 class HtmlToCaseParams(Schema):
     openai: OpenAiParams
+    quepid: QuepidParams
 
 
 @api.get("/scorer/{id}/", response={200: Scorer, 404: None}, tags=['Scorers management'])
