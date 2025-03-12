@@ -16,7 +16,10 @@ SECRET_KEY = os.getenv('DJANGO_SECRET')
 
 DEBUG = bool(int(os.getenv('DJANGO_DEBUG', 0)))
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+]
 
 
 # Application definition
