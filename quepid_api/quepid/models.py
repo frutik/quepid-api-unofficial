@@ -154,15 +154,6 @@ class ApiKeys(models.Model):
         managed = False
         db_table = 'api_keys'
 
-    @classmethod
-    def check_token(cls, bearer=None):
-        try:
-            return cls.objects\
-                .using('quepid')\
-                .get(token_digest=bearer.split()[1])
-        except:
-            pass
-
 
 class ArInternalMetadata(models.Model):
     key = models.CharField(primary_key=True, max_length=255)

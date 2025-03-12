@@ -21,9 +21,14 @@ def _by_pk(cls, pk):
 
 class AuthBearer(HttpBearer):
     def authenticate(self, request, token):
-        return qmodels.ApiKeys.check_token(
-            bearer=request.headers.get('Authorization', 'Bearer 123')
-        )
+        bearer = request.headers\
+            .get('Authorization', 'Bearer 123')
+        try:
+            return qmodels.ApiKeys.objects\
+                .using('quepid')\
+                .get(token_digest=bearer.split()[1])
+        except:
+            pass
 
 
 logger = logging.getLogger('')
