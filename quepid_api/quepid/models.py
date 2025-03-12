@@ -60,6 +60,52 @@ class ActiveStorageVariantRecords(models.Model):
         unique_together = (('blob', 'variation_digest'),)
 
 
+class AhoyEvents(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    visit_id = models.BigIntegerField(blank=True, null=True)
+    user_id = models.BigIntegerField(blank=True, null=True)
+    name = models.CharField(max_length=255, blank=True, null=True)
+    properties = models.JSONField(blank=True, null=True)
+    time = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'ahoy_events'
+
+
+class AhoyVisits(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    visit_token = models.CharField(unique=True, max_length=255, blank=True, null=True)
+    visitor_token = models.CharField(max_length=255, blank=True, null=True)
+    user_id = models.BigIntegerField(blank=True, null=True)
+    ip = models.CharField(max_length=255, blank=True, null=True)
+    user_agent = models.TextField(blank=True, null=True)
+    referrer = models.TextField(blank=True, null=True)
+    referring_domain = models.CharField(max_length=255, blank=True, null=True)
+    landing_page = models.TextField(blank=True, null=True)
+    browser = models.CharField(max_length=255, blank=True, null=True)
+    os = models.CharField(max_length=255, blank=True, null=True)
+    device_type = models.CharField(max_length=255, blank=True, null=True)
+    country = models.CharField(max_length=255, blank=True, null=True)
+    region = models.CharField(max_length=255, blank=True, null=True)
+    city = models.CharField(max_length=255, blank=True, null=True)
+    latitude = models.FloatField(blank=True, null=True)
+    longitude = models.FloatField(blank=True, null=True)
+    utm_source = models.CharField(max_length=255, blank=True, null=True)
+    utm_medium = models.CharField(max_length=255, blank=True, null=True)
+    utm_term = models.CharField(max_length=255, blank=True, null=True)
+    utm_content = models.CharField(max_length=255, blank=True, null=True)
+    utm_campaign = models.CharField(max_length=255, blank=True, null=True)
+    app_version = models.CharField(max_length=255, blank=True, null=True)
+    os_version = models.CharField(max_length=255, blank=True, null=True)
+    platform = models.CharField(max_length=255, blank=True, null=True)
+    started_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'ahoy_visits'
+
+
 class Annotations(models.Model):
     message = models.TextField(blank=True, null=True)
     source = models.CharField(max_length=255, blank=True, null=True)
@@ -86,7 +132,7 @@ class AnnouncementViewed(models.Model):
 
 class Announcements(models.Model):
     id = models.BigAutoField(primary_key=True)
-    text = models.TextField(blank=True, null=True)
+    text = models.TextField(db_collation='utf8mb4_unicode_ci', blank=True, null=True)
     author_id = models.IntegerField(blank=True, null=True)
     created_at = models.DateTimeField()
     updated_at = models.DateTimeField()
@@ -129,6 +175,79 @@ class ArInternalMetadata(models.Model):
         db_table = 'ar_internal_metadata'
 
 
+class BlazerAudits(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    user_id = models.BigIntegerField(blank=True, null=True)
+    query_id = models.BigIntegerField(blank=True, null=True)
+    statement = models.TextField(blank=True, null=True)
+    data_source = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'blazer_audits'
+
+
+class BlazerChecks(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    creator_id = models.BigIntegerField(blank=True, null=True)
+    query_id = models.BigIntegerField(blank=True, null=True)
+    state = models.CharField(max_length=255, blank=True, null=True)
+    schedule = models.CharField(max_length=255, blank=True, null=True)
+    emails = models.TextField(blank=True, null=True)
+    slack_channels = models.TextField(blank=True, null=True)
+    check_type = models.CharField(max_length=255, blank=True, null=True)
+    message = models.TextField(blank=True, null=True)
+    last_run_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField()
+    updated_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'blazer_checks'
+
+
+class BlazerDashboardQueries(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    dashboard_id = models.BigIntegerField(blank=True, null=True)
+    query_id = models.BigIntegerField(blank=True, null=True)
+    position = models.IntegerField(blank=True, null=True)
+    created_at = models.DateTimeField()
+    updated_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'blazer_dashboard_queries'
+
+
+class BlazerDashboards(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    creator_id = models.BigIntegerField(blank=True, null=True)
+    name = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField()
+    updated_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'blazer_dashboards'
+
+
+class BlazerQueries(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    creator_id = models.BigIntegerField(blank=True, null=True)
+    name = models.CharField(max_length=255, blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    statement = models.TextField(blank=True, null=True)
+    data_source = models.CharField(max_length=255, blank=True, null=True)
+    status = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField()
+    updated_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'blazer_queries'
+
+
 class BookMetadata(models.Model):
     id = models.BigAutoField(primary_key=True)
     user_id = models.IntegerField(blank=True, null=True)
@@ -150,10 +269,26 @@ class Books(models.Model):
     support_implicit_judgements = models.IntegerField(blank=True, null=True)
     show_rank = models.IntegerField(blank=True, null=True)
     owner_id = models.IntegerField(blank=True, null=True)
+    export_job = models.CharField(max_length=255, blank=True, null=True)
+    import_job = models.CharField(max_length=255, blank=True, null=True)
+    populate_job = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
         managed = False
         db_table = 'books'
+
+
+class BooksAiJudges(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    book = models.ForeignKey(Books, models.DO_NOTHING)
+    user_id = models.BigIntegerField()
+    created_at = models.DateTimeField()
+    updated_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'books_ai_judges'
+        unique_together = (('book', 'user_id'),)
 
 
 class CaseMetadata(models.Model):
@@ -174,8 +309,9 @@ class CaseScores(models.Model):
     all_rated = models.IntegerField(blank=True, null=True)
     created_at = models.DateTimeField(blank=True, null=True)
     queries = models.TextField(blank=True, null=True)
-    annotation = models.ForeignKey(Annotations, models.DO_NOTHING, blank=True, null=True)
+    annotation = models.OneToOneField(Annotations, models.DO_NOTHING, blank=True, null=True)
     updated_at = models.DateTimeField(blank=True, null=True)
+    scorer_id = models.BigIntegerField(blank=True, null=True)
 
     class Meta:
         managed = False
@@ -193,6 +329,7 @@ class Cases(models.Model):
     book_id = models.IntegerField(blank=True, null=True)
     public = models.IntegerField(blank=True, null=True)
     options = models.JSONField(blank=True, null=True)
+    nightly = models.IntegerField(blank=True, null=True)
 
     class Meta:
         managed = False
@@ -228,23 +365,10 @@ class Judgements(models.Model):
         unique_together = (('user_id', 'query_doc_pair'),)
 
 
-class Permissions(models.Model):
-    user_id = models.IntegerField(blank=True, null=True)
-    model_type = models.CharField(max_length=255)
-    action = models.CharField(max_length=255)
-    on = models.IntegerField(blank=True, null=True)
-    created_at = models.DateTimeField()
-    updated_at = models.DateTimeField()
-
-    class Meta:
-        managed = False
-        db_table = 'permissions'
-
-
 class Queries(models.Model):
     arranged_next = models.BigIntegerField(blank=True, null=True)
     arranged_at = models.BigIntegerField(blank=True, null=True)
-    query_text = models.CharField(max_length=2048, blank=True, null=True)
+    query_text = models.CharField(max_length=2048, db_collation='utf8mb4_bin', blank=True, null=True)
     notes = models.TextField(blank=True, null=True)
     case = models.ForeignKey(Cases, models.DO_NOTHING, blank=True, null=True)
     created_at = models.DateTimeField()
@@ -364,6 +488,7 @@ class SnapshotQueries(models.Model):
     score = models.FloatField(blank=True, null=True)
     all_rated = models.IntegerField(blank=True, null=True)
     number_of_results = models.IntegerField(blank=True, null=True)
+    response_status = models.IntegerField(blank=True, null=True)
 
     class Meta:
         managed = False
@@ -383,9 +508,171 @@ class Snapshots(models.Model):
         db_table = 'snapshots'
 
 
+class SolidCableMessages(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    channel = models.CharField(max_length=1024)
+    payload = models.TextField()
+    created_at = models.DateTimeField()
+    channel_hash = models.BigIntegerField()
+
+    class Meta:
+        managed = False
+        db_table = 'solid_cable_messages'
+
+
+class SolidQueueBlockedExecutions(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    job = models.OneToOneField('SolidQueueJobs', models.DO_NOTHING)
+    queue_name = models.CharField(max_length=255)
+    priority = models.IntegerField()
+    concurrency_key = models.CharField(max_length=255)
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'solid_queue_blocked_executions'
+
+
+class SolidQueueClaimedExecutions(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    job = models.OneToOneField('SolidQueueJobs', models.DO_NOTHING)
+    process_id = models.BigIntegerField(blank=True, null=True)
+    created_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'solid_queue_claimed_executions'
+
+
+class SolidQueueFailedExecutions(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    job = models.OneToOneField('SolidQueueJobs', models.DO_NOTHING)
+    error = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'solid_queue_failed_executions'
+
+
+class SolidQueueJobs(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    queue_name = models.CharField(max_length=255)
+    class_name = models.CharField(max_length=255)
+    arguments = models.TextField(blank=True, null=True)
+    priority = models.IntegerField()
+    active_job_id = models.CharField(max_length=255, blank=True, null=True)
+    scheduled_at = models.DateTimeField(blank=True, null=True)
+    finished_at = models.DateTimeField(blank=True, null=True)
+    concurrency_key = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField()
+    updated_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'solid_queue_jobs'
+
+
+class SolidQueuePauses(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    queue_name = models.CharField(unique=True, max_length=255)
+    created_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'solid_queue_pauses'
+
+
+class SolidQueueProcesses(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    kind = models.CharField(max_length=255)
+    last_heartbeat_at = models.DateTimeField()
+    supervisor_id = models.BigIntegerField(blank=True, null=True)
+    pid = models.IntegerField()
+    hostname = models.CharField(max_length=255, blank=True, null=True)
+    metadata = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField()
+    name = models.CharField(max_length=255)
+
+    class Meta:
+        managed = False
+        db_table = 'solid_queue_processes'
+        unique_together = (('name', 'supervisor_id'),)
+
+
+class SolidQueueReadyExecutions(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    job = models.OneToOneField(SolidQueueJobs, models.DO_NOTHING)
+    queue_name = models.CharField(max_length=255)
+    priority = models.IntegerField()
+    created_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'solid_queue_ready_executions'
+
+
+class SolidQueueRecurringExecutions(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    job = models.OneToOneField(SolidQueueJobs, models.DO_NOTHING)
+    task_key = models.CharField(max_length=255)
+    run_at = models.DateTimeField()
+    created_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'solid_queue_recurring_executions'
+        unique_together = (('task_key', 'run_at'),)
+
+
+class SolidQueueRecurringTasks(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    key = models.CharField(unique=True, max_length=255)
+    schedule = models.CharField(max_length=255)
+    command = models.CharField(max_length=2048, blank=True, null=True)
+    class_name = models.CharField(max_length=255, blank=True, null=True)
+    arguments = models.TextField(blank=True, null=True)
+    queue_name = models.CharField(max_length=255, blank=True, null=True)
+    priority = models.IntegerField(blank=True, null=True)
+    static = models.IntegerField()
+    description = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField()
+    updated_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'solid_queue_recurring_tasks'
+
+
+class SolidQueueScheduledExecutions(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    job = models.OneToOneField(SolidQueueJobs, models.DO_NOTHING)
+    queue_name = models.CharField(max_length=255)
+    priority = models.IntegerField()
+    scheduled_at = models.DateTimeField()
+    created_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'solid_queue_scheduled_executions'
+
+
+class SolidQueueSemaphores(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    key = models.CharField(unique=True, max_length=255)
+    value = models.IntegerField()
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField()
+    updated_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'solid_queue_semaphores'
+
+
 class Teams(models.Model):
     name = models.CharField(max_length=255, db_collation='utf8mb3_bin', blank=True, null=True)
-    owner = models.ForeignKey('Users', models.DO_NOTHING)
     created_at = models.DateTimeField()
     updated_at = models.DateTimeField()
 
@@ -482,12 +769,29 @@ class Users(models.Model):
     invitation_sent_at = models.DateTimeField(blank=True, null=True)
     invitation_accepted_at = models.DateTimeField(blank=True, null=True)
     invitation_limit = models.IntegerField(blank=True, null=True)
-    invited_by_id = models.IntegerField(blank=True, null=True)
+    invited_by = models.ForeignKey('self', models.DO_NOTHING, blank=True, null=True)
     invitations_count = models.IntegerField(blank=True, null=True)
     completed_case_wizard = models.IntegerField()
     stored_raw_invitation_token = models.CharField(max_length=255, blank=True, null=True)
     profile_pic = models.CharField(max_length=4000, blank=True, null=True)
+    system_prompt = models.CharField(max_length=4000, blank=True, null=True)
+    openai_key = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
         managed = False
         db_table = 'users'
+
+
+class WebRequests(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    snapshot_query = models.OneToOneField(SnapshotQueries, models.DO_NOTHING, blank=True, null=True)
+    request = models.TextField(blank=True, null=True)
+    response_status = models.IntegerField(blank=True, null=True)
+    integer = models.IntegerField(blank=True, null=True)
+    response = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField()
+    updated_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'web_requests'
