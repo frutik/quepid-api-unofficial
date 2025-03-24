@@ -38,7 +38,7 @@ logger = logging.getLogger('')
 api = NinjaAPI(
     title="Quepid Custom API",
     version=os.getenv('APP_VERSION', 'vX.X.X'),
-    # auth=AuthBearer()
+    auth=AuthBearer()
 )
 
 
