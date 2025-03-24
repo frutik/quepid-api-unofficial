@@ -44,6 +44,7 @@ def html_to_search(content, markdownify=False, model='gpt-4-turbo', api_key=None
             autolinks=False,
             heading_style="ATX"
         )
+    logger.info(content)
     client = OpenAI(api_key=api_key)
     message = [
         {

@@ -7,6 +7,8 @@ from ninja.errors import HttpError
 from ninja.files import UploadedFile
 from ninja import Schema, ModelSchema
 from ninja.security import HttpBearer
+from typing import List, Optional
+from ninja.pagination import paginate
 
 from playwright.sync_api import sync_playwright
 
@@ -73,6 +75,13 @@ def view_scorer(request, id: int):
     if r := _by_pk(qmodels.Scorers, id):
         return 200, r
     return 404, None
+
+
+@api.get("/case/", response=List[Case], tags=['Cases management'])
+@paginate
+def view_cases(request):
+    # @todo check rights?
+    return qmodels.Cases.objects.all()
 
 
 @api.get("/case/{id}/", response={200: Case, 404: None}, tags=['Cases management'])

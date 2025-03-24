@@ -29,6 +29,10 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
+        - name: web
+          image: frutik777/quepid-api-unofficial-web
+          ports:
+            - containerPort: 80
         - name: api
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
