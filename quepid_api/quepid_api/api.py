@@ -86,7 +86,7 @@ def view_scorer(request, id: int):
 @paginate
 def view_cases(request):
     # @todo check rights?
-    return qmodels.Cases.objects.all()
+    return qmodels.Cases.objects.using('quepid').all()
 
 
 @api.get("/case/{id}/", response={200: Case, 404: None}, tags=['Cases management'])
