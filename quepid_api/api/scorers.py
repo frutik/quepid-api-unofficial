@@ -14,7 +14,7 @@ logger = logging.getLogger('')
 router = Router(tags=["Scorers management"])
 
 
-@router.get("/{id}/", response=List[Scorer])
+@router.get("/", response=List[Scorer])
 @paginate
 def view_scorers(request):
     return qmodels.Scorers.objects\
