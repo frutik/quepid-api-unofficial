@@ -22,7 +22,7 @@ def view_scorers(request):
         .all()
 
 
-@router.get("/scorer/{id}/", response={200: Scorer, 404: None})
+@router.get("/{id}/", response={200: Scorer, 404: None})
 def view_scorer(request, id: int):
     if r := _by_pk(qmodels.Scorers, id):
         return 200, r
