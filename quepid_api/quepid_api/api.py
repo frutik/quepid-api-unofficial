@@ -97,6 +97,14 @@ class HtmlToCaseParams(Schema):
     quepid: QuepidParams
 
 
+@api.get("/scorer/{id}/", response=List[Scorer], tags=['Scorers management'])
+@paginate
+def view_scorers(request):
+    return qmodels.Scorers.objects\
+        .using('quepid')\
+        .all()
+
+
 @api.get("/scorer/{id}/", response={200: Scorer, 404: None}, tags=['Scorers management'])
 def view_scorer(request, id: int):
     if r := _by_pk(qmodels.Scorers, id):
@@ -108,8 +116,11 @@ def view_scorer(request, id: int):
 @paginate
 def view_search_endpoints(request):
     # @todo check rights?
-    return qmodels.SearchEndpoints.objects.using('quepid').all()
+    return qmodels.SearchEndpoints.objects\
+        .using('quepid')\
+        .all()
 
+# cases
 
 @api.get("/case/", response=List[Case], tags=['Cases management'])
 @paginate
@@ -144,6 +155,22 @@ def view_case(request, id: int):
 # def update_case(request, a: int, b: int):
 #     return {"result": a + b}
 
+# queries
+
+@api.get("/query/{case_id}/", response=List[Query], tags=['Query management'])
+@paginate
+def view_queries(request, case_id: int):
+    return qmodels.Queries.objects\
+        .using('quepid')\
+        .filter(case_id=case_id)
+
+
+@api.get("/query/{case_id}/{query_id}", response={200: Query, 404: None}, tags=['Query management'])
+def view_query(request, case_id: int, query_id: int):
+    if r := _by_pk(qmodels.Queries, query_id):
+        return 200, r
+    return 404, None
+
 
 @api.get("/query/{id}/", response={200: Query, 404: None}, tags=['Query management'])
 def view_query(request, id: int):
@@ -162,6 +189,7 @@ def create_query(request, data: CreateQuery):
 def update_query(request, id: int):
     return 400, None
 
+# url to case
 
 @api.post("/toolbox/url_to_case/", tags=['Toolbox'])
 def url_to_case(request, url: str, openai_key: str, params: UrlToCaseParams):
