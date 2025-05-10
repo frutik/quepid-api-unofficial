@@ -5,7 +5,7 @@ Supposed to be stateless and does not use its own database.
 
 <img width="1142" alt="main" src="https://github.com/user-attachments/assets/a8edc39c-a688-4605-8607-c21d2ebd94ad" />
 
-## Run locally
+## Run locally connecting to local Quepid
 
 ```
 docker compose build
@@ -20,6 +20,8 @@ open in the browser
 
 - for api: http://localhost:8081/api/docs
 - for quepid: http://localhost:3000/
+
+## Run locally connecting to your self-hosted Quepid
 
 please specify in `.env` correct connection parameters for quepid mysql database
 
