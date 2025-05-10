@@ -2,6 +2,13 @@ from ninja import ModelSchema
 
 from .models import *
 
+
+class SearchEndpoint(ModelSchema):
+    class Meta:
+        model = SearchEndpoints
+        fields = "__all__"
+
+
 class Scorer(ModelSchema):
     class Meta:
         model = Scorers

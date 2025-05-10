@@ -82,6 +82,13 @@ def view_scorer(request, id: int):
     return 404, None
 
 
+@api.get("/search-endpoint/", response=List[SearchEndpoint], tags=['Search Endpoints management'])
+@paginate
+def view_search_endpoints(request):
+    # @todo check rights?
+    return qmodels.SearchEndpoints.objects.using('quepid').all()
+
+
 @api.get("/case/", response=List[Case], tags=['Cases management'])
 @paginate
 def view_cases(request):
