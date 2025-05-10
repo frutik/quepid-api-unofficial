@@ -30,7 +30,7 @@ def view_queries(request, case_id: int):
         .filter(case_id=case_id)
 
 
-@router.get("/query/{case_id}/{query_id}", response={200: Query, 404: None})
+@router.get("/{case_id}/{query_id}", response={200: Query, 404: None})
 def view_query(request, case_id: int, query_id: int):
     if r := _by_pk(qmodels.Queries, query_id):
         return 200, r

@@ -77,7 +77,7 @@ def url_to_case(request, url: str, openai_key: str, params: UrlToCaseParams):
     return search_results
 
 
-@router.post("/toolbox/html_to_case/", tags=['Toolbox'])
+@router.post("/html_to_case/", tags=['Toolbox'])
 def html_to_case(request, openai_key: str, params: HtmlToCaseParams, html: UploadedFile = File(...)):
     html = html.read().decode('utf-8')
     if max_characters := params.openai.max_characters:

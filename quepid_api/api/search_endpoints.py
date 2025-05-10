@@ -13,7 +13,7 @@ logger = logging.getLogger('')
 router = Router(tags=["Search Endpoints management"])
 
 
-@router.get("/search-endpoint/", response=List[SearchEndpoint])
+@router.get("/", response=List[SearchEndpoint])
 @paginate
 def view_search_endpoints(request):
     # @todo check rights?
