@@ -1,7 +1,59 @@
 services:
+  quepid-api-mysql:
+    image: mysql:8.4.4
+    platform: linux/amd64
+    restart: always
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      retries: 5
+      start_period: 10s
+    environment:
+      MYSQL_DATABASE: 'db'
+      MYSQL_ROOT_PASSWORD: 'password'
+    ports:
+      - '3306:3306'
+    expose:
+      - '3306'
+    volumes:
+      - ./data/mysql/:/var/lib/mysql
+  quepid-api-quepid:
+    image: o19s/quepid:8.1.0
+    container_name: quepid-api-quepid
+    platform: linux/amd64
+    ports:
+      - "3000:3000"
+#    command: ["/usr/bin/sleep", "infinity"]
+    depends_on:
+      quepid-api-mysql:
+        condition: service_healthy
+    environment:
+      PORT: "3000"
+      RACK_ENV: "production"
+      RAILS_ENV: "production"
+      FORCE_SSL: "false"
+      MAX_THREADS: "2"
+      WEB_CONCURRENCY: "2"
+      RAILS_LOG_TO_STDOUT: "true"
+      RAILS_SERVE_STATIC_FILES: "true"
+      TC_URL: ""
+      PRIVACY_URL: ""
+      COOKIES_URL: ""
+      QUEPID_GA: ""
+      QUEPID_DOMAIN: "https://example.com"
+      EMAIL_MARKETING_MODE: "false"
+      QUEPID_DEFAULT_SCORER: "AP@10"
+      SIGNUP_ENABLED: "true"
+      COMMUNAL_SCORERS_ONLY: "false"
+      EMAIL_PROVIDER: ""
+      EMAIL_SENDER: ""
+      QUERY_LIST_SORTABLE: "true"
+      QUEPID_PROPHET_ANALYTICS: "true"
+      DATABASE_URL: "mysql2://root:password@quepid-api-mysql:3306/db"
+      SECRET_KEY_BASE: "<secret key base>"
   quepid-api-app:
     container_name: quepid-api-app
-    image: frutik777/quepid-api-unofficial
+    image: frutik777/quepid-api-unofficial:latest
     platform: linux/amd64
     build:
       context: ./quepid_api
@@ -11,10 +63,13 @@ services:
       - .env
     environment:
       DEBUG: 1
+    depends_on:
+      quepid-api-mysql:
+        condition: service_healthy
     network_mode: service:quepid-api-web
   quepid-api-web:
     container_name: quepid-api-web
-    image: frutik777/quepid-api-unofficial-web
+    image: frutik777/quepid-api-unofficial-web:latest
     platform: linux/amd64
     build:
       context: ./quepid_api
