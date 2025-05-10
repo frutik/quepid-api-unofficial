@@ -11,10 +11,15 @@ Supposed to be stateless and does not use its own database.
 docker compose build
 cp .env.example .env
 vi .env
+docker compose run quepid-api-quepid bin/rake db:migrate
+docker compose run quepid-api-quepid bin/rake db:seed
 docker compose up
 ```
 
-open in the browser http://127.0.0.1/api/docs
+open in the browser
+
+- for api: http://localhost:8081/api/docs
+- for quepid: http://localhost:3000/
 
 please specify in `.env` correct connection parameters for quepid mysql database
 

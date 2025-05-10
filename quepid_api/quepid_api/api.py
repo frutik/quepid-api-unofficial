@@ -1,6 +1,8 @@
 import os
 import logging
 
+from django.utils import timezone
+
 from ninja import NinjaAPI
 from ninja import File
 from ninja.errors import HttpError
@@ -26,9 +28,12 @@ class AuthBearer(HttpBearer):
         bearer = request.headers\
             .get('Authorization', 'Bearer 123')
         try:
-            return qmodels.ApiKeys.objects\
+            api_key = qmodels.ApiKeys.objects\
                 .using('quepid')\
                 .get(token_digest=bearer.split()[1])
+            return qmodels.Users.objects\
+                .using('quepid')\
+                .get(pk=api_key.user_id)
         except:
             pass
 
@@ -40,6 +45,23 @@ api = NinjaAPI(
     version=os.getenv('APP_VERSION', 'vX.X.X'),
     auth=AuthBearer()
 )
+
+
+class CreateCase(Schema):
+    name: str
+    scorer_id: int
+#           "id": 1,
+#       "case_name": "Movies Search",
+#       "last_try_number": 1,
+#       "owner": 1,
+#       "archived": 0,
+#       "scorer_id": 5,
+#       "created_at": "2025-05-10T18:53:42Z",
+#       "updated_at": "2025-05-10T18:54:16Z",
+#       "book_id": null,
+#       "public": null,
+#       "options": null,
+#       "nightly": null
 
 
 class CreateQuery(Schema):
@@ -96,6 +118,21 @@ def view_cases(request):
     return qmodels.Cases.objects.using('quepid').all()
 
 
+@api.post("/case", response={200: Case, 400: str}, tags=['Cases management'])
+def create_case(request, data: CreateCase):
+    try:
+        now = timezone.now()
+        return qmodels.Cases.objects.using('quepid').create(
+            case_name=data.name,
+            scorer_id=data.scorer_id,
+            created_at=now,
+            updated_at=now,
+            owner=request.auth
+        )
+    except Exception as e:
+        return 400, str(e)
+
+
 @api.get("/case/{id}/", response={200: Case, 404: None}, tags=['Cases management'])
 def view_case(request, id: int):
     if r := _by_pk(qmodels.Cases, id):
@@ -103,11 +140,6 @@ def view_case(request, id: int):
     return 404, None
 
 
-# @api.post("/case", tags=['Cases management'])
-# def create_case(request, data: CreateQuery):
-#     return {"result": a + b}
-#
-#
 # @api.patch("/case", tags=['Cases management'])
 # def update_case(request, a: int, b: int):
 #     return {"result": a + b}
