@@ -63,3 +63,7 @@ This API uses the same API tokens as the official API.
 To access the endpoints, create an API token as described 
 in the official documentation and use it to authorize your 
 requests.
+
+## Demo
+
+https://www.youtube.com/watch?v=GIgMtBqzxus
