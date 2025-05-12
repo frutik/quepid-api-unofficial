@@ -1,5 +1,4 @@
 import os
-import logging
 
 from ninja import NinjaAPI
 
@@ -11,8 +10,6 @@ from api.cases import router as cases_router
 from api.queries import router as queries_router
 from api.toolbox import router as toolbox_router
 
-
-logger = logging.getLogger('')
 
 api = NinjaAPI(
     title="Quepid Custom API",
