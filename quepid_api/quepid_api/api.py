@@ -8,6 +8,7 @@ from api.scorers import router as scorers_router
 from api.search_endpoints import router as search_endpoints_router
 from api.cases import router as cases_router
 from api.queries import router as queries_router
+from api.books import router as books_router
 from api.toolbox import router as toolbox_router
 
 
@@ -21,4 +22,5 @@ api.add_router("/scorers", scorers_router)
 api.add_router("/search_endpoints", search_endpoints_router)
 api.add_router("/case", cases_router)
 api.add_router("/query", queries_router)
+api.add_router("/books", books_router)
 api.add_router("/toolbox", toolbox_router)

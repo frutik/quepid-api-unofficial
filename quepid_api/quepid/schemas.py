@@ -27,3 +27,9 @@ class Query(ModelSchema):
         model = Queries
         fields = "__all__"
         exclude = ['options', ]
+
+
+class Book(ModelSchema):
+    class Meta:
+        model = Books
+        fields = "__all__"
