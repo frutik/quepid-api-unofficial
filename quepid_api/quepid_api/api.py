@@ -15,7 +15,13 @@ from api.toolbox import router as toolbox_router
 api = NinjaAPI(
     title="Quepid Custom API",
     version=os.getenv('APP_VERSION', 'vX.X.X'),
-    auth=AuthBearer()
+    auth=AuthBearer(),
+    openapi_tags=[
+        {
+            "name": "Books",
+            "description": "Queries and judgments are organized into books. Here you can manage your books."
+        }
+    ]
 )
 
 api.add_router("/scorers", scorers_router)
