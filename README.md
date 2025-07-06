@@ -13,6 +13,7 @@ cp .env.example .env
 vi .env
 docker compose run quepid-api-quepid bin/rake db:migrate
 docker compose run quepid-api-quepid bin/rake db:seed
+docker compose run quepid-api-quepid bundle exec thor user:create -a admin@example.com "Admin User" supersecret
 docker compose up
 ```
 
