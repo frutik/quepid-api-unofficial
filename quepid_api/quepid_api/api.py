@@ -5,6 +5,7 @@ from ninja import NinjaAPI
 from api.utils import AuthBearer
 
 from api.scorers import router as scorers_router
+from api.teams import router as teams_router
 from api.search_endpoints import router as search_endpoints_router
 from api.cases import router as cases_router
 from api.queries import router as queries_router
@@ -18,6 +19,7 @@ api = NinjaAPI(
 )
 
 api.add_router("/scorers", scorers_router)
+api.add_router("/teams", teams_router)
 api.add_router("/search_endpoints", search_endpoints_router)
 api.add_router("/case", cases_router)
 api.add_router("/query", queries_router)

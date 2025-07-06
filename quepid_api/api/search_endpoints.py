@@ -12,7 +12,7 @@ logger = logging.getLogger('')
 
 router = Router(tags=["Search Endpoints management"])
 
-SearchEngineType = Literal["solr", "elasticsearch", "opensearch", "searchapi"]
+SearchEngineType = Literal["solr", "es", "opensearch", "searchapi"]
 
 
 class CreateSearchEndpoint(Schema):

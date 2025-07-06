@@ -9,6 +9,12 @@ class SearchEndpoint(ModelSchema):
         fields = "__all__"
 
 
+class Team(ModelSchema):
+    class Meta:
+        model = Teams
+        fields = "__all__"
+
+
 class Scorer(ModelSchema):
     class Meta:
         model = Scorers
