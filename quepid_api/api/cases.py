@@ -18,6 +18,7 @@ router = Router(tags=["Cases management"])
 class CreateCase(Schema):
     name: str
     scorer_id: int = 5
+    nightly: int = 1
     book_id: int = None
     search_endpoint_id: int = None
 
@@ -61,6 +62,7 @@ def create_case(request, data: CreateCase):
             created_at=now,
             updated_at=now,
             last_try_number=1,
+            nightly=data.nightly,
             archived=0,
             owner=request.auth
         )
