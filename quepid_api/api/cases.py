@@ -80,6 +80,7 @@ def create_case(request, data: CreateCase):
             search_endpoint=search_endpoint,  # Will be set later when user configures it
             created_at=now,
             updated_at=now,
+            number_of_rows=30,
             field_spec='id:_id, title: name',
             escape_query=1
         )
