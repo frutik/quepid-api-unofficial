@@ -430,7 +430,7 @@ class Scorers(models.Model):
 class SearchEndpoints(models.Model):
     id = models.BigAutoField(primary_key=True)
     name = models.CharField(max_length=255, blank=True, null=True)
-    owner_id = models.IntegerField(blank=True, null=True)
+    owner = models.ForeignKey('Users', models.DO_NOTHING, blank=True, null=True)
     search_engine = models.CharField(max_length=50, blank=True, null=True)
     endpoint_url = models.CharField(max_length=500, blank=True, null=True)
     api_method = models.CharField(max_length=255, blank=True, null=True)

@@ -17,8 +17,8 @@ router = Router(tags=["Cases management"])
 
 class CreateCase(Schema):
     name: str
-    scorer_id: int
-    book_id: int
+    scorer_id: int = 5
+    book_id: int = None
 
 #           "id": 1,
 #       "case_name": "Movies Search",
@@ -59,6 +59,8 @@ def create_case(request, data: CreateCase):
             scorer_id=data.scorer_id,
             created_at=now,
             updated_at=now,
+            last_try_number=1,
+            archived=0,
             owner=request.auth
         )
     except Exception as e:
