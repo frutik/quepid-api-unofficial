@@ -21,6 +21,7 @@ class CreateCase(Schema):
     nightly: int = 1
     book_id: int = None
     search_endpoint_id: int = None
+    search_query: str = None
 
 #           "id": 1,
 #       "case_name": "Movies Search",
@@ -75,10 +76,12 @@ def create_case(request, data: CreateCase):
         qmodels.Tries.objects.using('quepid').create(
             try_number=1,
             case=case,
-            query_params={},  # Default empty query parameters
+            query_params=data.search_query or   {},  # Default empty query parameters
             search_endpoint=search_endpoint,  # Will be set later when user configures it
             created_at=now,
-            updated_at=now
+            updated_at=now,
+            field_spec='id:_id, title: name',
+            escape_query=1
         )
         return case
     except Exception as e:
