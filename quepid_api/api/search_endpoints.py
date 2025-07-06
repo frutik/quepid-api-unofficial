@@ -19,6 +19,7 @@ class CreateSearchEndpoint(Schema):
     name: str
     endpoint_url: str
     search_engine: SearchEngineType
+    proxy_requests: int = 0
     custom_headers: dict | None = None
     api_method: str | None = None
 
@@ -50,6 +51,7 @@ def create_search_endpoint(request, data: CreateSearchEndpoint):
             search_engine=data.search_engine,  # No need for .value conversion
             custom_headers=data.custom_headers,
             api_method=data.api_method,
+            proxy_requests=data.proxy_requests,
             created_at=now,
             updated_at=now,
             owner=request.auth

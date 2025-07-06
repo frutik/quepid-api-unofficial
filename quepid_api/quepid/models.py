@@ -731,7 +731,7 @@ class Tries(models.Model):
     created_at = models.DateTimeField()
     updated_at = models.DateTimeField()
     ancestry = models.CharField(max_length=3072, blank=True, null=True)
-    search_endpoint_id = models.BigIntegerField(blank=True, null=True)
+    search_endpoint = models.ForeignKey('SearchEndpoints', models.DO_NOTHING, blank=True, null=True)
 
     class Meta:
         managed = False

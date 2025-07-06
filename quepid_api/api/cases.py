@@ -19,6 +19,7 @@ class CreateCase(Schema):
     name: str
     scorer_id: int = 5
     book_id: int = None
+    search_endpoint_id: int = None
 
 #           "id": 1,
 #       "case_name": "Movies Search",
@@ -54,7 +55,7 @@ def view_cases(request):
 def create_case(request, data: CreateCase):
     try:
         now = timezone.now()
-        return qmodels.Cases.objects.using('quepid').create(
+        case = qmodels.Cases.objects.using('quepid').create(
             case_name=data.name,
             scorer_id=data.scorer_id,
             created_at=now,
@@ -63,6 +64,21 @@ def create_case(request, data: CreateCase):
             archived=0,
             owner=request.auth
         )
+        logger.info(case)
+        search_endpoint = None
+        if search_endpoint_id := data.search_endpoint_id:
+            if not (search_endpoint := _by_pk(qmodels.SearchEndpoints, search_endpoint_id)):
+                return 400, 'Unknown search endpoint.'
+        logger.info([case, search_endpoint])
+        qmodels.Tries.objects.using('quepid').create(
+            try_number=1,
+            case=case,
+            query_params={},  # Default empty query parameters
+            search_endpoint=search_endpoint,  # Will be set later when user configures it
+            created_at=now,
+            updated_at=now
+        )
+        return case
     except Exception as e:
         return 400, str(e)
 

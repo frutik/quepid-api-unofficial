@@ -18,7 +18,6 @@ router = Router(tags=["Queries management"])
 
 class CreateQuery(Schema):
     query_text: str
-    case: int
     query_options: dict = {}
 
 
@@ -47,10 +46,13 @@ def view_query(request, case_id: int, query_id: int):
 @router.post("/{case_id}/", response={200: Query, 400: str})
 def create_query(request, case_id: int, data: CreateQuery):
     try:
+        if not (case := _by_pk(qmodels.Cases, case_id)):
+            return 400, 'Unknown case.'
+        logger.info(case)
         now = timezone.now()
         return qmodels.Queries.objects.using('quepid').create(
             query_text=data.query_text,
-            case_id=case_id,
+            case=case,
             notes=data.query_options.get('notes', ''),
             information_need=data.query_options.get('information_need', ''),
             options=str(data.query_options) if data.query_options else None,
