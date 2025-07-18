@@ -14,8 +14,15 @@ vi .env
 docker compose run quepid-api-quepid bin/rake db:migrate
 docker compose run quepid-api-quepid bin/rake db:seed
 docker compose run quepid-api-quepid bundle exec thor user:create -a admin@example.com "Admin User" supersecret
+docker compose run quepid-api-quepid bundle exec thor user:add_api_key admin@example.com
+```
+
+Store api key created by a command above
+
+```
 docker compose up
 ```
+
 
 open in the browser
 
@@ -68,3 +75,14 @@ requests.
 ## Demo
 
 https://www.youtube.com/watch?v=GIgMtBqzxus
+
+
+```
+docker run --rm \
+  -v ${PWD}:/local openapitools/openapi-generator-cli generate \
+  -i https://shopnest.webshop.nl/api/openapi.json \
+  -g python \
+  --skip-validate-spec \
+  --additional-properties=licenseName=MIT \
+  -o /local/shopnest-client
+  ```

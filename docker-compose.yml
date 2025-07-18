@@ -60,6 +60,8 @@ services:
         condition: service_healthy
       quepid-api-elasticsearch:
         condition: service_healthy
+    volumes:
+      - ./user.thor:/rails/lib/tasks/user.thor
     environment:
       PORT: "3000"
       RACK_ENV: "production"
