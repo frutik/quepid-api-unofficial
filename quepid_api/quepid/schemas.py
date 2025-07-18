@@ -35,6 +35,12 @@ class Query(ModelSchema):
         exclude = ['options', ]
 
 
+class Rating(ModelSchema):
+    class Meta:
+        model = Ratings
+        fields = "__all__"
+
+
 class Book(ModelSchema):
     class Meta:
         model = Books

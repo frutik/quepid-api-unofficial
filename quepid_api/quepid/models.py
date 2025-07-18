@@ -299,7 +299,7 @@ class CaseScores(models.Model):
     score = models.FloatField(blank=True, null=True)
     all_rated = models.IntegerField(blank=True, null=True)
     created_at = models.DateTimeField(blank=True, null=True)
-    queries = models.TextField(blank=True, null=True)
+    queries = models.BinaryField(blank=True, null=True)
     annotation = models.OneToOneField(Annotations, models.DO_NOTHING, blank=True, null=True)
     updated_at = models.DateTimeField(blank=True, null=True)
     scorer_id = models.BigIntegerField(blank=True, null=True)
