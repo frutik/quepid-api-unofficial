@@ -43,7 +43,9 @@ def create_rating(request, query_id: int, data: CreateRating):
             return 400, 'Unknown query.'
         logger.info(query)
         now = timezone.now()
-        return qmodels.Ratings.objects.using('quepid').create(
+        return qmodels.Ratings.objects\
+            .using('quepid')\
+            .create(
             query=query,
             doc_id=data.doc_id,
             rating=data.rating,
@@ -84,7 +86,8 @@ def create_rating(request, query_id: int, data: CreateRating):
 @router.delete("/query/{query_id}/rating/{doc_id}", response={200: dict, 404: None, 400: str})
 def delete_rating(request, query_id: int, doc_id: str):
     try:
-        rating = qmodels.Ratings.objects.using('quepid')\
+        rating = qmodels.Ratings.objects\
+            .using('quepid')\
             .filter(query_id=query_id)\
             .filter(doc_id=doc_id)\
             .first()
