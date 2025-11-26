@@ -83,6 +83,8 @@ def create_rating(request, query_id: int, data: CreateRating):
 
 @router.delete("/query/{query_id}/rating/{doc_id}", response={200: dict, 404: None, 400: str})
 def delete_rating(request, query_id: int, doc_id: str):
+    # AI, implement this method
+    # make it work like other alredy implemeted ones. AI!
     pass
     # try:
     #     query = qmodels.Queries.objects.using('quepid').filter(id=query_id, case_id=case_id).first()
