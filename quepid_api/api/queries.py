@@ -34,15 +34,15 @@ def view_queries(request, case_id: int):
     return qmodels.Queries.objects\
         .using('quepid')\
         .filter(case_id=case_id)
-
-
+    
+    
 @router.get("/{case_id}/{query_id}", response={200: Query, 404: None})
 def view_query(request, case_id: int, query_id: int):
     if r := _by_pk(qmodels.Queries, query_id):
         return 200, r
     return 404, None
-
-
+    
+    
 @router.post("/{case_id}/", response={200: Query, 400: str})
 def create_query(request, case_id: int, data: CreateQuery):
     try:
@@ -61,8 +61,8 @@ def create_query(request, case_id: int, data: CreateQuery):
         )
     except Exception as e:
         return 400, str(e)
-
-
+        
+        
 @router.patch("/{case_id}/{query_id}", response={200: Query, 404: None, 400: str})
 def update_query(request, case_id: int, query_id: int, data: UpdateQuery):
     try:
@@ -88,8 +88,8 @@ def update_query(request, case_id: int, query_id: int, data: UpdateQuery):
         return 200, query
     except Exception as e:
         return 400, str(e)
-
-
+        
+        
 @router.delete("/{case_id}/{query_id}", response={200: dict, 404: None, 400: str})
 def delete_query(request, case_id: int, query_id: int):
     try:

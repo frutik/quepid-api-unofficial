@@ -27,15 +27,15 @@ def view_teams(request):
     return qmodels.Teams.objects \
         .using('quepid') \
         .all()
-
-
+    
+    
 @router.get("/{id}/", response={200: Team, 404: None})
 def view_team(request, id: int):
     if r := _by_pk(qmodels.Teams, id):
         return 200, r
     return 404, None
-
-
+    
+    
 @router.post("/", response={200: Team, 400: str})
 def create_team(request, data: CreateTeam):
     """Create a new team"""
@@ -48,8 +48,8 @@ def create_team(request, data: CreateTeam):
         )
     except Exception as e:
         return 400, str(e)
-
-
+        
+        
 @router.put("/{id}/", response={200: Team, 404: None, 400: str})
 def update_team(request, id: int, data: UpdateTeam):
     """Update an existing team"""
@@ -64,8 +64,8 @@ def update_team(request, id: int, data: UpdateTeam):
         return 200, team
     except Exception as e:
         return 400, str(e)
-
-
+        
+        
 @router.delete("/{id}/", response={204: None, 404: None})
 def delete_team(request, id: int):
     """Delete an existing team"""

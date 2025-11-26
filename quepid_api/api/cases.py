@@ -51,8 +51,8 @@ class UpdateCase(Schema):
 def view_cases(request):
     # @todo check rights?
     return qmodels.Cases.objects.using('quepid').all()
-
-
+    
+    
 @router.post("/", response={200: Case, 400: str})
 def create_case(request, data: CreateCase):
     try:
@@ -87,14 +87,15 @@ def create_case(request, data: CreateCase):
         return case
     except Exception as e:
         return 400, str(e)
-
-
+        
+        
 @router.get("/{id}/", response={200: Case, 404: None})
 def view_case(request, id: int):
     if r := _by_pk(qmodels.Cases, id):
         return 200, r
     return 404, None
-
+    
+    
 @router.put("/{id}/", response={200: Case, 404: None, 400: str})
 def update_case(request, id: int, data: UpdateCase):
     """Update an existing case"""
@@ -124,7 +125,8 @@ def update_case(request, id: int, data: UpdateCase):
         return 200, case
     except Exception as e:
         return 400, str(e)
-
+        
+        
 @router.delete("/{id}/", response={204: None, 404: None})
 def delete_case(request, id: int):
     """Delete an existing case"""

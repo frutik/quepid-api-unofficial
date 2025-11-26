@@ -83,22 +83,17 @@ def create_rating(request, query_id: int, data: CreateRating):
 #         return 400, str(e)
 
 
-@router.delete("/query/{query_id}/rating/{doc_id}", response={200: dict, 404: None, 400: str})
+@router.delete("/query/{query_id}/rating/{doc_id}", response={200: dict, 404: None})
 def delete_rating(request, query_id: int, doc_id: str):
+    rating = qmodels.Ratings.objects\
+        .using('quepid')\
+        .filter(query_id=query_id)\
+        .filter(doc_id=doc_id)\
+        .first()
+    if not rating:
+        return 404, None
     try:
-        rating = qmodels.Ratings.objects\
-            .using('quepid')\
-            .filter(query_id=query_id)\
-            .filter(doc_id=doc_id)\
-            .first()
-        if not rating:
-            return 404, None
         rating.delete()
-        return 200, {"message": "Rating deleted successfully"}
     except Exception as e:
         return 400, str(e)
-    #         return 404, None
-    #     rating.delete()
-    #     return 200, {"message": "Rating deleted successfully"}
-    # except Exception as e:
-    #     return 400, str(e)
+    return 200, {"message": "Rating deleted successfully"}

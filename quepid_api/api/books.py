@@ -38,15 +38,15 @@ class UpdateBook(Schema):
 @paginate
 def view_books(request):
     return qmodels.Books.objects.using('quepid').all()
-
-
+    
+    
 @router.get("/{book_id}", response={200: Book, 404: None})
 def view_book(request, book_id: int):
     if r := _by_pk(qmodels.Books, book_id):
         return 200, r
     return 404, None
-
-
+    
+    
 @router.post("/", response={200: Book, 400: str})
 def create_book(request, data: CreateBook):
     try:
@@ -63,8 +63,8 @@ def create_book(request, data: CreateBook):
         )
     except Exception as e:
         return 400, str(e)
-
-
+        
+        
 @router.patch("/{book_id}", response={200: Book, 404: None, 400: str})
 def update_book(request, book_id: int, data: UpdateBook):
     try:
@@ -92,8 +92,8 @@ def update_book(request, book_id: int, data: UpdateBook):
         return 200, book
     except Exception as e:
         return 400, str(e)
-
-
+        
+        
 @router.delete("/{book_id}", response={200: dict, 404: None, 400: str})
 def delete_book(request, book_id: int):
     try:

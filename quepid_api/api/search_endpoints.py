@@ -38,8 +38,8 @@ def view_search_endpoints(request):
     return qmodels.SearchEndpoints.objects \
         .using('quepid') \
         .all()
-
-
+    
+    
 @router.post("/", response={200: SearchEndpoint, 400: str})
 def create_search_endpoint(request, data: CreateSearchEndpoint):
     try:
@@ -58,15 +58,15 @@ def create_search_endpoint(request, data: CreateSearchEndpoint):
         )
     except Exception as e:
         return 400, str(e)
-
-
+        
+        
 @router.get("/{id}/", response={200: SearchEndpoint, 404: None})
 def view_search_endpoint(request, id: int):
     if r := _by_pk(qmodels.SearchEndpoints, id):
         return 200, r
     return 404, None
-
-
+    
+    
 @router.put("/{id}/", response={200: SearchEndpoint, 404: None, 400: str})
 def update_search_endpoint(request, id: int, data: UpdateSearchEndpoint):
     """Update an existing search endpoint"""
@@ -92,8 +92,8 @@ def update_search_endpoint(request, id: int, data: UpdateSearchEndpoint):
         return 200, endpoint
     except Exception as e:
         return 400, str(e)
-
-
+        
+        
 @router.delete("/{id}/", response={204: None, 404: None})
 def delete_search_endpoint(request, id: int):
     """Delete an existing search endpoint"""
