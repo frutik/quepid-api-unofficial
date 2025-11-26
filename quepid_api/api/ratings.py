@@ -84,7 +84,10 @@ def create_rating(request, query_id: int, data: CreateRating):
 @router.delete("/query/{query_id}/rating/{doc_id}", response={200: dict, 404: None, 400: str})
 def delete_rating(request, query_id: int, doc_id: str):
     try:
-        rating = qmodels.Ratings.objects.using('quepid').filter(query_id=query_id).filter(doc_id=doc_id).first()
+        rating = qmodels.Ratings.objects.using('quepid')\
+            .filter(query_id=query_id)\
+            .filter(doc_id=doc_id)\
+            .first()
         if not rating:
             return 404, None
         rating.delete()
