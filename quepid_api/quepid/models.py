@@ -766,7 +766,7 @@ class Users(models.Model):
     stored_raw_invitation_token = models.CharField(max_length=255, blank=True, null=True)
     profile_pic = models.CharField(max_length=4000, blank=True, null=True)
     system_prompt = models.CharField(max_length=4000, blank=True, null=True)
-    openai_key = models.CharField(max_length=255, blank=True, null=True)
+    # openai_key = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
         managed = False

@@ -1,0 +1,10 @@
+services:
+  ollama-embeddings:
+      image: ollama/ollama
+      container_name: ollama-embeddings
+      ports:
+        - "11434:11434"
+      volumes:
+        - ./data/ollama/data:/tmp/data
+      environment:
+        OLLAMA_MODELS: "/tmp/data/.ollama/models"

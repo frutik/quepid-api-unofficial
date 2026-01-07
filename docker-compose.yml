@@ -74,7 +74,7 @@ services:
     volumes:
       - ./data/mysql/:/var/lib/mysql
   quepid-api-quepid:
-    image: o19s/quepid:8.1.0
+    image: o19s/quepid:8.3.6
     container_name: quepid-api-quepid
     platform: linux/amd64
     ports:
@@ -85,8 +85,8 @@ services:
         condition: service_healthy
       quepid-api-elasticsearch:
         condition: service_healthy
-    volumes:
-      - ./user.thor:/rails/lib/tasks/user.thor
+#    volumes:
+#      - ./user.thor:/rails/lib/tasks/user.thor
     environment:
       PORT: "3000"
       RACK_ENV: "production"
