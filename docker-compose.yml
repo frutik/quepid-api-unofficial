@@ -113,7 +113,7 @@ services:
       SECRET_KEY_BASE: "<secret key base>"
   quepid-api-app:
     container_name: quepid-api-app
-    image: frutik777/quepid-api-unofficial:latest
+    image: frutik777/quepid-api-unofficial-app:v0.6.1
     platform: linux/amd64
     build:
       context: ./quepid_api
@@ -131,7 +131,7 @@ services:
     network_mode: service:quepid-api-web
   quepid-api-web:
     container_name: quepid-api-web
-    image: frutik777/quepid-api-unofficial-web:latest
+    image: frutik777/quepid-api-unofficial-web:v0.6.1
     platform: linux/amd64
     build:
       context: ./quepid_api
