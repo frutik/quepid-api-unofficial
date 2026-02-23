@@ -1,9 +1,8 @@
-uwsgi
-Django>=4.2.28
-pytz
-psycopg2
+gunicorn
+Django>=6.0.2
+asgiref>=3.9.1
 mysqlclient>=2.0.3
-django-ninja
+django-ninja>=1.5.1
 pytest-playwright
 openai
 markdownify>=0.0.2

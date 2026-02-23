@@ -1,4 +1,4 @@
-FROM python:3.12 AS app
+FROM python:3.13 AS app
 
 WORKDIR /app
 
@@ -9,7 +9,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/tmp/app/plwr
 RUN mkdir ${TMP_DIR} -p && \
     chmod 0777 ${TMP_DIR} -R
 
-CMD ["uwsgi"]
+CMD ["gunicorn", "quepid_api.wsgi:application", "--bind", "0.0.0.0:8001", "--workers", "4", "--threads", "2"]
 
 VOLUME [ "${TMP_DIR}" ]
 
