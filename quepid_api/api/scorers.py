@@ -9,7 +9,7 @@ from ninja.pagination import paginate
 from ninja import Schema
 from .utils import _by_pk
 
-logger = logging.getLogger('')
+logger = logging.getLogger(__name__)
 
 router = Router(tags=["Scorers management"])
 

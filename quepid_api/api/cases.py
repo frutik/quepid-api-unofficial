@@ -10,7 +10,7 @@ from ninja import Schema
 from .utils import _by_pk
 from ninja import ModelSchema
 
-logger = logging.getLogger('')
+logger = logging.getLogger(__name__)
 
 router = Router(tags=["Cases management"])
 

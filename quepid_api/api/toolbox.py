@@ -10,7 +10,7 @@ from typing import List
 from ninja.pagination import paginate
 from ninja import Schema
 
-logger = logging.getLogger('')
+logger = logging.getLogger(__name__)
 
 router = Router(tags=["Toolbox"])
 

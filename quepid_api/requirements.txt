@@ -1,12 +1,12 @@
 uwsgi
-Django==4.2.18
+Django>=4.2.28
 pytz
 psycopg2
 mysqlclient>=2.0.3
 django-ninja
 pytest-playwright
 openai
-markdownify
+markdownify>=0.0.2
 pytest>=7.0.0
 pytest-django>=4.5.0
 pytest-cov>=4.0.0

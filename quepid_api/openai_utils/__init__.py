@@ -8,7 +8,7 @@ from openai import OpenAI
 
 from .prompts import SEARCH_RESULTS_SCRAPPER
 
-logger = logging.getLogger('')
+logger = logging.getLogger(__name__)
 
 
 class SearchResult(BaseModel):
