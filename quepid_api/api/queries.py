@@ -1,10 +1,11 @@
 import logging
+import json
 
 from ninja import Router
 from django.utils import timezone
 import quepid.models as qmodels
 from quepid.schemas import Query
-from typing import List
+from typing import List, Optional
 from ninja.pagination import paginate
 from ninja import Schema
 
@@ -19,13 +20,15 @@ router = Router(tags=["Queries management"])
 class CreateQuery(Schema):
     query_text: str
     query_options: dict = {}
+    notes: str = ''
+    information_need: str = ''
 
 
 class UpdateQuery(Schema):
-    query_text: str = None
-    notes: str = None
-    information_need: str = None
-    query_options: dict = None
+    query_text: Optional[str]
+    information_need: Optional[str]
+    notes: Optional[str]
+    query_options: Optional[dict]
 
 
 @router.get("/{case_id}/", response=List[Query])
@@ -53,9 +56,9 @@ def create_query(request, case_id: int, data: CreateQuery):
         return qmodels.Queries.objects.using('quepid').create(
             query_text=data.query_text,
             case=case,
-            notes=data.query_options.get('notes', ''),
-            information_need=data.query_options.get('information_need', ''),
-            options=str(data.query_options) if data.query_options else None,
+            notes=data.notes,
+            information_need=data.information_need,
+            options=json.dumps(data.query_options) if data.query_options else None,
             created_at=now,
             updated_at=now
         )
@@ -78,7 +81,7 @@ def update_query(request, case_id: int, query_id: int, data: UpdateQuery):
         if data.information_need is not None:
             update_fields['information_need'] = data.information_need
         if data.query_options is not None:
-            update_fields['options'] = str(data.query_options)
+            update_fields['options'] = json.dumps(data.query_options)
         
         if update_fields:
             update_fields['updated_at'] = timezone.now()

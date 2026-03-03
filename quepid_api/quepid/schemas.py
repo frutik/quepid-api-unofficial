@@ -1,3 +1,5 @@
+import json
+
 from ninja import ModelSchema
 
 from .models import *
@@ -28,11 +30,24 @@ class Case(ModelSchema):
 
 
 class Query(ModelSchema):
-    query_options: dict = {}
+    query_options: dict
+
     class Meta:
         model = Queries
         fields = "__all__"
         exclude = ['options', ]
+
+    @staticmethod
+    def resolve_query_options(obj):
+        raw = getattr(obj, "options", None)
+        if not raw:
+            return {}
+        if isinstance(raw, dict):
+            return raw  # in case options is already JSONField / dict
+        try:
+            return json.loads(raw)
+        except (TypeError, json.JSONDecodeError):
+            return {}
 
 
 class Rating(ModelSchema):
