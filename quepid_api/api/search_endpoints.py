@@ -20,6 +20,7 @@ class CreateSearchEndpoint(Schema):
     endpoint_url: str
     search_engine: SearchEngineType
     proxy_requests: int = 0
+    mapper_code: str | None = None
     custom_headers: dict | None = None
     api_method: str | None = None
 
@@ -28,6 +29,7 @@ class UpdateSearchEndpoint(Schema):
     name: str
     endpoint_url: str
     search_engine: SearchEngineType
+    mapper_code: str | None = None
     custom_headers: dict | None = None
     api_method: str
 
@@ -50,6 +52,7 @@ def create_search_endpoint(request, data: CreateSearchEndpoint):
             archived=0,
             search_engine=data.search_engine,  # No need for .value conversion
             custom_headers=data.custom_headers,
+            mapper_code=data.mapper_code,
             api_method=data.api_method,
             proxy_requests=data.proxy_requests,
             created_at=now,
@@ -76,6 +79,7 @@ def update_search_endpoint(request, id: int, data: UpdateSearchEndpoint):
             return 404, None
 
         # Update only provided fields
+        endpoint.mapper_code = data.mapper_code
         if data.name is not None:
             endpoint.name = data.name
         if data.endpoint_url is not None:
