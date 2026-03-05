@@ -22,6 +22,7 @@ class CreateCase(Schema):
     book_id: int = None
     search_endpoint_id: int = None
     search_query: str = None
+    fields_mapping: str = 'id:_id, title: name'
 
 #           "id": 1,
 #       "case_name": "Movies Search",
@@ -45,6 +46,8 @@ class UpdateCase(Schema):
     public: int | None = None
     options: dict | None = None
     nightly: int | None = None
+    fields_mapping: str = 'id:_id, title: name'
+
 
 @router.get("/", response=List[Case])
 @paginate
@@ -76,12 +79,12 @@ def create_case(request, data: CreateCase):
         qmodels.Tries.objects.using('quepid').create(
             try_number=1,
             case=case,
-            query_params=data.search_query or   {},  # Default empty query parameters
-            search_endpoint=search_endpoint,  # Will be set later when user configures it
+            query_params=data.search_query or {},
+            search_endpoint=search_endpoint,
             created_at=now,
             updated_at=now,
             number_of_rows=30,
-            field_spec='id:_id, title: name',
+            field_spec=data.fields_mapping,
             escape_query=1
         )
         return case
