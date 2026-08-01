@@ -36,6 +36,10 @@ Rules for working with it:
   (`quepid/db/schema.rb`), understanding what a Rails model does with a row
   before this API writes one, and checking associations behind the plain
   `IntegerField`s listed below.
+- **The pin is far ahead of the schema this API targets** — currently unreleased
+  8.6.0 against models generated from v8.1.0. `quepid/db/schema.rb` is therefore
+  *not* a description of the database this code talks to; see
+  `docs/quepid-compatibility.md` before treating it as one.
 - **Path ambiguity to watch.** `quepid/` at the repo root is the Rails
   submodule; `quepid_api/quepid/` is this project's Django app holding the
   `inspectdb` models. Elsewhere in this file, bare `quepid/models.py` and
@@ -78,6 +82,12 @@ the OpenAPI schema.
 ## The Rails-owned schema — the central constraint
 
 `quepid/models.py` is **`inspectdb` output** reflecting Quepid's Rails schema.
+It reflects **Quepid v8.1.0** specifically, which is what bounds the Quepid
+versions this API runs against — `docs/quepid-compatibility.md` has the version
+matrix, the evidence behind it, and what breaks in Quepid v8.4.0. Read it before
+changing anything under `quepid/` or bumping the Quepid image in
+`docker-compose.yml`.
+
 Consequences that are easy to get wrong:
 
 - **`models.py` must stay pure `inspectdb` output. This is a hard requirement.**

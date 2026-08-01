@@ -1,7 +1,15 @@
 # quepid-api-unofficial
-Unofficial API for Quepid. 
-Current version of teh API based on Quepid version `7.18.1`
+Unofficial API for Quepid.
 Supposed to be stateless and does not use its own database.
+
+## Quepid compatibility
+
+This release is built against Quepid **8.1.0** and runs against Quepid
+**8.0.0 – 8.3.7**. It does **not** work on Quepid 8.4.0 or newer, which dropped
+the `books` columns this API still expects.
+
+Full version matrix, the evidence behind it and what to change when
+re-targeting: [`docs/quepid-compatibility.md`](docs/quepid-compatibility.md).
 
 <img width="1142" alt="main" src="https://github.com/user-attachments/assets/a8edc39c-a688-4605-8607-c21d2ebd94ad" />
 
