@@ -1,4 +1,7 @@
 gunicorn
+uvicorn[standard]
+uvloop
+
 Django==6.0.7
 asgiref>=3.9.1
 mysqlclient>=2.0.3

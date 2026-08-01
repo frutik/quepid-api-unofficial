@@ -43,28 +43,6 @@ spec:
           env:
             - name: APP_VERSION
               value: "{{ .Values.appVersion | default .Chart.AppVersion }}"
-            - name: UWSGI_SOCKET
-              value: "{{ .Values.uwsgi.socket_host }}:{{ .Values.uwsgi.socket_port }}"
-            - name: UWSGI_MASTER
-              value: "1"
-            - name: UWSGI_STATS
-              value: "127.0.0.1:9191"
-            - name: UWSGI_WSGI_FILE
-              value: "quepid_api/wsgi.py"
-            - name: UWSGI_CHDIR
-              value: "/app/"
-            - name: UWSGI_THREADS
-              value: "{{ .Values.uwsgi.threads }}"
-            - name: UWSGI_CHEAPER_ALGO
-              value: "{{ .Values.uwsgi.cheaper_algo }}"
-            - name: UWSGI_CHEAPER
-              value: "{{ .Values.uwsgi.cheaper }}"
-            - name: UWSGI_CHEAPER_INITIAL
-              value: "{{ .Values.uwsgi.cheaper_initial }}"
-            - name: UWSGI_WORKERS
-              value: "{{ .Values.uwsgi.workers }}"
-            - name: UWSGI_CHEAPER_STEP
-              value: "{{ .Values.uwsgi.cheaper_step }}"
             - name: DJANGO_DEBUG
               value: "{{ .Values.django.debug }}"
             - name: DJANGO_SECRET
