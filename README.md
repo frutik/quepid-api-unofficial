@@ -109,6 +109,8 @@ your Quepid data directly. It exposes 14 collections — `cases`, `queries`,
 and `teamscases` — queried with a MongoDB-style aggregation pipeline
 (`$match`, `$lookup`, `$sort`, `$project`, `$group`, `$limit`).
 
+https://www.youtube.com/watch?v=vcgjahwHSko
+
 Endpoint (note the doubled path segment):
 
 ```
@@ -146,6 +148,7 @@ their own before starting Claude Code:
 ```
 export QUEPID_MCP_API_KEY=<your-api-token>
 ```
+
 
 ## Demo
 
