@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "quepid": {
+      "type": "http",
+      "url": "http://localhost:8081/mcp/mcp",
+      "headers": {
+        "Authorization": "Bearer ${QUEPID_MCP_API_KEY}"
+      }
+    }
+  }
+}

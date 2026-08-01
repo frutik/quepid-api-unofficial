@@ -72,6 +72,54 @@ To access the endpoints, create an API token as described
 in the official documentation and use it to authorize your 
 requests.
 
+## MCP server
+
+Alongside the REST API this project serves a read-only
+[MCP](https://modelcontextprotocol.io) endpoint, so an AI assistant can query
+your Quepid data directly. It exposes 14 collections — `cases`, `queries`,
+`ratings`, `books`, `querydocpairs`, `judgements`, `tries`, `snapshots`,
+`snapshotqueries`, `searchendpoints`, `scorers`, `selectionstrategies`, `teams`
+and `teamscases` — queried with a MongoDB-style aggregation pipeline
+(`$match`, `$lookup`, `$sort`, `$project`, `$group`, `$limit`).
+
+Endpoint (note the doubled path segment):
+
+```
+http://localhost:8081/mcp/mcp
+```
+
+**It uses the same API token as everything else here** — the one issued by
+Quepid with `thor user:add_api_key`. There is no separate credential to manage,
+and no extra setup: the endpoint is live as soon as the app is running.
+
+Results are read-only and scoped to the token's owner and the teams they belong
+to, so an assistant only ever sees what that user could see in Quepid itself.
+An empty result means the data is not shared with you, not that it is missing.
+Quepid administrators see everything.
+
+### Add it to Claude Code
+
+```
+claude mcp add --transport http --scope user quepid \
+  http://localhost:8081/mcp/mcp \
+  --header "Authorization: Bearer <your-api-token>"
+```
+
+Then check it connected:
+
+```
+claude mcp list
+```
+
+For a self-hosted deployment swap in your own host. To share the config with
+your team instead, this repo already ships a `.mcp.json` that reads the token
+from the environment, so no secret is committed — each developer just exports
+their own before starting Claude Code:
+
+```
+export QUEPID_MCP_API_KEY=<your-api-token>
+```
+
 ## Demo
 
 https://www.youtube.com/watch?v=GIgMtBqzxus

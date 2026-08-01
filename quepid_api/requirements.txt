@@ -1,8 +1,11 @@
 gunicorn
-Django>=6.0.2
+Django==6.0.7
 asgiref>=3.9.1
 mysqlclient>=2.0.3
 django-ninja>=1.5.1
+djangorestframework>=3.17.1
+django-mcp-server==0.5.7
+mcp<2.0.0
 pytest-playwright
 openai
 markdownify>=0.0.2

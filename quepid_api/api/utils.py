@@ -1,22 +1,14 @@
 from ninja.security import HttpBearer
 
 
-import quepid.models as qmodels
+from common.auth import user_from_token
 
 
 class AuthBearer(HttpBearer):
     def authenticate(self, request, token):
-        bearer = request.headers\
-            .get('Authorization', 'Bearer 123')
-        try:
-            api_key = qmodels.ApiKeys.objects\
-                .using('quepid')\
-                .get(token_digest=bearer.split()[1])
-            return qmodels.Users.objects\
-                .using('quepid')\
-                .get(pk=api_key.user_id)
-        except:
-            pass
+        # ninja has already stripped the "Bearer " prefix; the lookup itself
+        # lives in common.auth so the MCP endpoint shares this exact path.
+        return user_from_token(token)
 
 
 def _by_pk(cls, pk):
