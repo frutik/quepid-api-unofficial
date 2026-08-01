@@ -1,0 +1,3 @@
+[submodule "quepid"]
+	path = quepid
+	url = https://github.com/o19s/quepid.git
