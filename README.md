@@ -5,6 +5,25 @@ Supposed to be stateless and does not use its own database.
 
 <img width="1142" alt="main" src="https://github.com/user-attachments/assets/a8edc39c-a688-4605-8607-c21d2ebd94ad" />
 
+## Clone
+
+Quepid itself is vendored as a git submodule in `quepid/`, for reference to the
+database schema this API reads and writes. Clone with submodules:
+
+```
+git clone --recurse-submodules git@github.com:frutik/quepid-api-unofficial.git
+```
+
+If you already cloned without it, `quepid/` will be an empty directory — fill it
+in with:
+
+```
+git submodule update --init
+```
+
+Nothing in the API imports from `quepid/`, so it is not required to run the app;
+it is there to read.
+
 ## Run locally connecting to local Quepid
 
 ```
