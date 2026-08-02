@@ -1,6 +1,14 @@
 # quepid-api-unofficial
-Unofficial API for Quepid.
-Supposed to be stateless and does not use its own database.
+
+An unofficial API for [Quepid](https://github.com/o19s/quepid), in two surfaces:
+
+- an **HTTP API** described by **OpenAPI 3.1**, browsable at `/api/docs`
+- a read-only **MCP server** at `/mcp/mcp`, publishing 14 collections to LLM
+  clients
+
+Both accept the same bearer tokens as the official Quepid API. The app is
+stateless: it has no database of its own, and reads and writes the MySQL schema
+that the Rails Quepid app owns and migrates.
 
 ## Quepid compatibility
 
