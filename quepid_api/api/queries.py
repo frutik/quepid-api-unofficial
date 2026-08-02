@@ -1,5 +1,4 @@
 import logging
-import json
 
 from ninja import Router
 from django.utils import timezone
@@ -58,7 +57,10 @@ def create_query(request, case_id: int, data: CreateQuery):
             case=case,
             notes=data.notes,
             information_need=data.information_need,
-            options=json.dumps(data.query_options) if data.query_options else None,
+            # queries.options is a MySQL json column (Quepid v8.2.0+) reflected as
+            # a JSONField, so Django serializes it -- dumping here would store a
+            # JSON string where Quepid expects an object.
+            options=data.query_options or None,
             created_at=now,
             updated_at=now
         )
@@ -81,7 +83,7 @@ def update_query(request, case_id: int, query_id: int, data: UpdateQuery):
         if data.information_need is not None:
             update_fields['information_need'] = data.information_need
         if data.query_options is not None:
-            update_fields['options'] = json.dumps(data.query_options)
+            update_fields['options'] = data.query_options
         
         if update_fields:
             update_fields['updated_at'] = timezone.now()

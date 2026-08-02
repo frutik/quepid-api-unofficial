@@ -74,7 +74,7 @@ services:
     volumes:
       - ./data/mysql/:/var/lib/mysql
   quepid-api-quepid:
-    image: o19s/quepid:8.3.6
+    image: o19s/quepid:8.5.0
     container_name: quepid-api-quepid
     platform: linux/amd64
     ports:

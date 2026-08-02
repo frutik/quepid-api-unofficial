@@ -36,10 +36,11 @@ Rules for working with it:
   (`quepid/db/schema.rb`), understanding what a Rails model does with a row
   before this API writes one, and checking associations behind the plain
   `IntegerField`s listed below.
-- **The pin is far ahead of the schema this API targets** — currently unreleased
-  8.6.0 against models generated from v8.1.0. `quepid/db/schema.rb` is therefore
-  *not* a description of the database this code talks to; see
-  `docs/quepid-compatibility.md` before treating it as one.
+- **The pin matches the schema this API targets** — both are **v8.5.0**, as is
+  the Quepid image in `docker-compose.yml`. So `quepid/db/schema.rb` *is*
+  currently a description of the database this code talks to. That has not
+  always been true and is not guaranteed: check
+  `docs/quepid-compatibility.md` before relying on it.
 - **Path ambiguity to watch.** `quepid/` at the repo root is the Rails
   submodule; `quepid_api/quepid/` is this project's Django app holding the
   `inspectdb` models. Elsewhere in this file, bare `quepid/models.py` and
@@ -47,7 +48,8 @@ Rules for working with it:
 
 ## Commands
 
-There is no build step and no test suite (see "Testing" below). Development runs
+There is no build step; the test suite is HTTP integration only (see "Testing"
+below, and note that it needs a rebuilt app image). Development runs
 through Docker Compose:
 
 ```bash
@@ -88,9 +90,10 @@ Quepid versions this code supports go there *and* in
 ## The Rails-owned schema — the central constraint
 
 `quepid/models.py` is **`inspectdb` output** reflecting Quepid's Rails schema.
-It reflects **Quepid v8.1.0** specifically, which is what bounds the Quepid
-versions this API runs against — `docs/quepid-compatibility.md` has the version
-matrix, the evidence behind it, and what breaks in Quepid v8.4.0. Read it before
+It reflects **Quepid v8.5.0** specifically, which is what bounds the Quepid
+versions this API runs against — **v8.4.0 – v8.5.0**, a narrow window that does
+not reach back to v8.3.x. `docs/quepid-compatibility.md` has the version matrix,
+the evidence behind it, and a step-by-step re-targeting procedure. Read it before
 changing anything under `quepid/` or bumping the Quepid image in
 `docker-compose.yml`.
 
@@ -104,6 +107,19 @@ Consequences that are easy to get wrong:
   something needs to *behave* like a model (e.g. a `Users` row that has to
   satisfy DRF's `IsAuthenticated`), adapt it at the boundary that needs it and
   leave the model alone; `quepid_mcp/auth.py:QuepidPrincipal` is the worked example.
+- **…with exactly three documented exceptions, which a regeneration WILL drop.**
+  The rule above is about *behaviour*; these are field-type corrections
+  `inspectdb` cannot infer, and re-applying them by hand is a required step of
+  every regeneration:
+  - `SearchEndpoints.owner` — `ForeignKey('Users')`, not `owner_id` IntegerField
+  - `Tries.search_endpoint` — `ForeignKey('SearchEndpoints')`, not `search_endpoint_id`
+  - `CaseScores.queries` — `BinaryField`, not `TextField` (the column is a `mediumblob`)
+
+  Neither FK exists as a database constraint, so `inspectdb` emits plain integer
+  fields every time. `api/search_endpoints.py:60` and `api/cases.py:102` assign
+  *model instances* to those two, so reverting them breaks both endpoints with a
+  bare 400. `docs/quepid-compatibility.md` §"Hand-patches carried across
+  regenerations" has the table, the origin commits and the verifying diff.
 - **Every model is `managed = False`.** Never run `makemigrations` or `migrate`.
   There are no `migrations/` directories in this project and there should not be
   — Rails owns the schema, and Django writing to it would corrupt a live Quepid
@@ -210,18 +226,48 @@ qmodels.Cases.objects \
 
 ## Testing
 
-`requirements.txt` pulls in `pytest`, `pytest-django`, `pytest-cov` and
-`pytest-playwright`, but **no tests, no `conftest.py` and no pytest
-configuration exist**. Adding the first test means also adding pytest config
-that sets `DJANGO_SETTINGS_MODULE=quepid_api.settings`. Note that unit tests
-would need either a live Quepid MySQL or mocking, since the models are
-unmanaged and pytest-django cannot create a test database for them.
+`tests/` holds **124 HTTP integration tests** driving the deployed stack — nginx,
+gunicorn, django-ninja and a real MySQL — configured by `pytest.ini`. They never
+import Django, so there is deliberately **no `DJANGO_SETTINGS_MODULE` and no
+pytest-django**: the models are unmanaged, so pytest-django could not build a
+test database for them, and mocking the ORM would hide the one class of bug
+these tests exist to catch — Rails dropping a column out from under
+`quepid/models.py`.
+
+97 cover the REST routers; **27 cover the MCP server** (`tests/test_mcp.py`,
+over a small JSON-RPC client in `tests/mcp_client.py`). The MCP module is
+organised around the three prompts in the demo video linked from `README.md`,
+because that is what the surface is actually used for: listing cases, resolving
+a case by name and paging its queries, and reading the query DSL off a case's
+latest try.
+
+```bash
+docker compose up -d
+export QUEPID_API_TOKEN=<thor user:add_api_key>
+export QUEPID_TARGET=8.5.0     # the Quepid the stack runs; asserted both ways
+pytest
+```
+
+Two things to know before running them:
+
+- **They write to a real Quepid database** and clean up afterwards on a
+  best-effort basis. Point them at a throwaway Compose stack. `DELETE
+  /api/case/{id}/` is a soft delete, so each run leaves archived cases behind.
+- Without `QUEPID_API_TOKEN` every test skips, so a bare `pytest` is safe.
+- **`QUEPID_MEMBER_API_TOKEN` must belong to a non-administrator** if you set
+  it. `quepid_mcp/mcp.py:119` returns the unscoped queryset for admins, so the
+  three MCP scoping tests would pass vacuously with the bootstrap admin token.
+  They skip when it is unset rather than assert something meaningless.
+- **The app image bakes the code in** — there is no volume mount, so
+  `docker compose build quepid-api-app && docker compose up -d quepid-api-app`
+  is required before your changes are what the suite is testing. Editing a file
+  and re-running `pytest` tests the *previous* build.
 
 ## The MCP server
 
 A second, read-only API over the same models and the same bearer tokens, served
 at **`/mcp/mcp`** (the doubled segment is required — see `docs/mcp-server-plan.md`
-§2). 14 collections, queried with a MongoDB-style aggregation pipeline.
+§2). 13 collections, queried with a MongoDB-style aggregation pipeline.
 
 Point a client at it by exporting a Quepid-issued token; `.mcp.json` is checked
 in and reads it from the environment, so it never holds a secret:

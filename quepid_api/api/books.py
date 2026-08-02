@@ -18,8 +18,6 @@ router = Router(tags=["Books management"])
 
 class CreateBook(Schema):
     name: str
-    scorer_id: int
-    selection_strategy_id: int
     support_implicit_judgements: bool = False
     show_rank: bool = False
     description: str = ""
@@ -27,8 +25,6 @@ class CreateBook(Schema):
 
 class UpdateBook(Schema):
     name: str = None
-    scorer_id: int = None
-    selection_strategy_id: int = None
     support_implicit_judgements: bool = None
     show_rank: bool = None
     description: str = None
@@ -53,10 +49,11 @@ def create_book(request, data: CreateBook):
         now = timezone.now()
         return qmodels.Books.objects.using('quepid').create(
             name=data.name,
-            scorer_id=data.scorer_id,
-            selection_strategy_id=data.selection_strategy_id,
             support_implicit_judgements=1 if data.support_implicit_judgements else 0,
             show_rank=1 if data.show_rank else 0,
+            # books.archived is NOT NULL with a Rails-side default (v8.3.0+).
+            # inspectdb gives it no Django default, so Django would send NULL.
+            archived=0,
             created_at=now,
             updated_at=now,
             owner_id=request.auth.id
@@ -75,10 +72,6 @@ def update_book(request, book_id: int, data: UpdateBook):
         update_fields = {}
         if data.name is not None:
             update_fields['name'] = data.name
-        if data.scorer_id is not None:
-            update_fields['scorer_id'] = data.scorer_id
-        if data.selection_strategy_id is not None:
-            update_fields['selection_strategy_id'] = data.selection_strategy_id
         if data.support_implicit_judgements is not None:
             update_fields['support_implicit_judgements'] = 1 if data.support_implicit_judgements else 0
         if data.show_rank is not None:

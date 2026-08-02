@@ -3,7 +3,7 @@
 An unofficial API for [Quepid](https://github.com/o19s/quepid), in two surfaces:
 
 - an **HTTP API** described by **OpenAPI 3.1**, browsable at `/api/docs`
-- a read-only **MCP server** at `/mcp/mcp`, publishing 14 collections to LLM
+- a read-only **MCP server** at `/mcp/mcp`, publishing 13 collections to LLM
   clients
 
 Both accept the same bearer tokens as the official Quepid API. The app is
@@ -12,9 +12,20 @@ that the Rails Quepid app owns and migrates.
 
 ## Quepid compatibility
 
-This release is built against Quepid **8.1.0** and runs against Quepid
-**8.0.0 – 8.3.7**. It does **not** work on Quepid 8.4.0 or newer, which dropped
-the `books` columns this API still expects.
+**Pick the release that matches your Quepid.** This app reflects Quepid's
+Rails-owned schema, so each release only runs against the Quepid versions whose
+schema it was generated from.
+
+| This API | Quepid | |
+| --- | --- | --- |
+| **v0.9.0** — unreleased, `main` | **8.4.0 – 8.5.0** | built against 8.5.0 |
+| **v0.8.2** — latest release | **8.0.0 – 8.3.7** | built against 8.1.0 |
+| v0.3.6 – v0.6.0 | 8.0.0 – 8.1.0 | |
+| v0.0.1 – v0.2.11 | 7.15.1 – 7.18.1 | |
+
+The two current lines do **not** overlap, and cannot: v8.4.0 both dropped and
+added `books` columns, so `main` fails on Quepid 8.3.7 and older, and v0.8.2's
+books endpoints fail on 8.4.0 and newer. Pick a side.
 
 Full version matrix, the evidence behind it and what to change when
 re-targeting: [`docs/quepid-compatibility.md`](docs/quepid-compatibility.md).
@@ -92,14 +103,24 @@ v8.4.0 schema change.
 
 ```
 export QUEPID_API_TOKEN=<your api token>
-export QUEPID_TARGET=8.3.6
+export QUEPID_TARGET=8.5.0
 npm test
+```
+
+`QUEPID_MEMBER_API_TOKEN` is optional and only affects `tests/test_mcp.py`. MCP
+scopes rows to the token owner, but Quepid administrators bypass that scoping,
+so the three scoping tests need a key belonging to a **non-admin** account or
+they would pass whether or not scoping works. They skip when it is unset:
+
+```
+export QUEPID_MEMBER_API_TOKEN=<key for a non-admin user>
 ```
 
 Just one module:
 
 ```
 npm run test:books
+npm run test:mcp
 ```
 
 Nothing here fails for want of a stack. With no `QUEPID_API_TOKEN` the
@@ -153,9 +174,9 @@ requests.
 
 Alongside the REST API this project serves a read-only
 [MCP](https://modelcontextprotocol.io) endpoint, so an AI assistant can query
-your Quepid data directly. It exposes 14 collections — `cases`, `queries`,
+your Quepid data directly. It exposes 13 collections — `cases`, `queries`,
 `ratings`, `books`, `querydocpairs`, `judgements`, `tries`, `snapshots`,
-`snapshotqueries`, `searchendpoints`, `scorers`, `selectionstrategies`, `teams`
+`snapshotqueries`, `searchendpoints`, `scorers`, `teams`
 and `teamscases` — queried with a MongoDB-style aggregation pipeline
 (`$match`, `$lookup`, `$sort`, `$project`, `$group`, `$limit`).
 
