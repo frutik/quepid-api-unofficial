@@ -226,13 +226,20 @@ qmodels.Cases.objects \
 
 ## Testing
 
-`tests/` holds **97 HTTP integration tests** driving the deployed stack — nginx,
+`tests/` holds **124 HTTP integration tests** driving the deployed stack — nginx,
 gunicorn, django-ninja and a real MySQL — configured by `pytest.ini`. They never
 import Django, so there is deliberately **no `DJANGO_SETTINGS_MODULE` and no
 pytest-django**: the models are unmanaged, so pytest-django could not build a
 test database for them, and mocking the ORM would hide the one class of bug
 these tests exist to catch — Rails dropping a column out from under
 `quepid/models.py`.
+
+97 cover the REST routers; **27 cover the MCP server** (`tests/test_mcp.py`,
+over a small JSON-RPC client in `tests/mcp_client.py`). The MCP module is
+organised around the three prompts in the demo video linked from `README.md`,
+because that is what the surface is actually used for: listing cases, resolving
+a case by name and paging its queries, and reading the query DSL off a case's
+latest try.
 
 ```bash
 docker compose up -d
@@ -247,6 +254,10 @@ Two things to know before running them:
   best-effort basis. Point them at a throwaway Compose stack. `DELETE
   /api/case/{id}/` is a soft delete, so each run leaves archived cases behind.
 - Without `QUEPID_API_TOKEN` every test skips, so a bare `pytest` is safe.
+- **`QUEPID_MEMBER_API_TOKEN` must belong to a non-administrator** if you set
+  it. `quepid_mcp/mcp.py:119` returns the unscoped queryset for admins, so the
+  three MCP scoping tests would pass vacuously with the bootstrap admin token.
+  They skip when it is unset rather than assert something meaningless.
 - **The app image bakes the code in** — there is no volume mount, so
   `docker compose build quepid-api-app && docker compose up -d quepid-api-app`
   is required before your changes are what the suite is testing. Editing a file

@@ -6,6 +6,7 @@
   "scripts": {
     "test": "python3 -m pytest",
     "test:books": "python3 -m pytest tests/test_books.py -v",
+    "test:mcp": "python3 -m pytest tests/test_mcp.py -v",
     "publish": "git push --follow-tags"
   },
   "author": "frutik",

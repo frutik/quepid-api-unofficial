@@ -54,8 +54,23 @@ observe.
   `books.scorer_id` and `books.selection_strategy_id` were dropped, and asserts
   in both directions — so it also catches a target declared newer than the
   database actually is.
-- `npm test` and `npm run test:books`; `pytest.ini`; `requests` in
-  `quepid_api/requirements.txt`.
+- **27 integration tests for the MCP server** (`tests/test_mcp.py`), the first
+  coverage that surface has ever had — the REST suite never calls `/mcp/mcp`.
+  They run over a small JSON-RPC client (`tests/mcp_client.py`) that speaks the
+  streamable-HTTP transport directly, and are organised around the three prompts
+  in the demo video linked from the README: listing cases with their try counts,
+  nightly flags and books; resolving a case **by name** and paging its queries;
+  and reading the query DSL off a case's latest try. Alongside those, guards for
+  what the Quepid 8.5.0 move changed here — `selectionstrategies` unpublished,
+  the dropped `books` columns, the `CompositePrimaryKey` junction tables, and
+  `$match` traversal through `Tries.search_endpoint`, which is the cheapest way
+  to catch a regeneration silently reverting that hand-patched ForeignKey.
+- `QUEPID_MEMBER_API_TOKEN` (optional) enables the three MCP row-scoping tests.
+  They need a **non-administrator** key: `quepid_mcp/mcp.py:119` bypasses
+  scoping for admins, so asserting it with the bootstrap token would pass
+  whether or not scoping works. Unset, they skip.
+- `npm test`, `npm run test:books` and `npm run test:mcp`; `pytest.ini`;
+  `requests` in `quepid_api/requirements.txt`.
 - `GET /api/case/` accepts **`?archived=true`** to list archived cases instead of
   active ones.
 
@@ -122,11 +137,12 @@ observe.
 - `archived = NULL` is unreachable over HTTP (`update_case` treats `None` as
   "leave alone"), so that third state is verified by reading the queryset, not by
   a test.
-- The `query_options` double-encoding fixed above is **still not covered by a
-  test**, and cannot be from REST: `resolve_query_options` falls back to
-  `json.loads` and recovers, so a regression would look identical over HTTP.
-  Catching it needs the stored column (`SELECT JSON_TYPE(options)`) or the MCP
-  surface, neither of which the suite touches.
+- ~~The `query_options` double-encoding is not covered by a test.~~ Now covered,
+  but only from MCP (`test_query_options_is_an_object_not_a_double_encoded_string`),
+  which returns `queryset.values()` with no resolver in front of it. Verified by
+  reintroducing the bug: the MCP test fails while all 16 REST query tests still
+  pass, which is the point — `resolve_query_options` recovers via `json.loads`,
+  so no REST assertion can ever see it.
 - Books' `scale`, `scale_with_labels` and `scoring_guidelines` — which replaced
   the dropped scorer and selection-strategy references in v8.4.0 — are readable
   through `GET /api/books` but cannot be set: `CreateBook` and `UpdateBook` do

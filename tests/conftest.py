@@ -37,8 +37,18 @@ import warnings
 import pytest
 import requests
 
+from mcp_client import McpClient, McpError
+
 
 BASE_URL = os.getenv("QUEPID_API_URL", "http://localhost:8081/api").rstrip("/")
+
+#: The MCP server, served by the same app on the same host. The doubled path
+#: segment is required -- ``mcp_server.urls`` appends its own "mcp" under the
+#: project's ``mcp/`` prefix (``docs/mcp-server-plan.md`` §2).
+MCP_URL = os.getenv(
+    "QUEPID_MCP_URL",
+    BASE_URL[: -len("/api")] + "/mcp/mcp" if BASE_URL.endswith("/api") else BASE_URL + "/mcp/mcp",
+)
 
 # Quepid v8.4.0 is the cutover: books lose scorer_id and selection_strategy_id.
 BOOKS_SPLIT = (8, 4)
@@ -274,3 +284,52 @@ def book(api, book_payload):
     row = _create(api, f"{BASE_URL}/books/", book_payload)
     yield row
     _discard(api, f"{BASE_URL}/books/{row['id']}")
+
+
+@pytest.fixture(scope="session")
+def mcp(live_stack):
+    """An initialized MCP session, authenticated with the same token as ``api``.
+
+    Session-scoped because the handshake is per-connection state, not per-test:
+    ``initialize`` mints an ``Mcp-Session-Id`` that every later call echoes back.
+    """
+    token = os.getenv("QUEPID_API_TOKEN")
+    if not token:
+        pytest.skip("QUEPID_API_TOKEN is unset; integration tests need a live stack")
+
+    client = McpClient(MCP_URL, token)
+    try:
+        client.initialize()
+    except McpError as exc:
+        pytest.fail(f"MCP initialize failed at {MCP_URL}: {exc}")
+
+    yield client
+    client.close()
+
+
+@pytest.fixture(scope="session")
+def member_mcp(live_stack):
+    """An MCP session for a **non-administrator** user.
+
+    Required to test row scoping at all. ``quepid_mcp/mcp.py:119`` returns the
+    unscoped queryset for administrators, and the bootstrap token in CLAUDE.md
+    belongs to an admin -- so a scoping assertion made with ``mcp`` passes
+    whether or not scoping works, which is worse than no assertion.
+
+    Mint one against a non-admin Quepid account::
+
+        docker compose exec -T quepid-api-quepid \\
+            bundle exec thor user:add_api_key member@example.com
+        export QUEPID_MEMBER_API_TOKEN=<the key it prints>
+    """
+    token = os.getenv("QUEPID_MEMBER_API_TOKEN")
+    if not token:
+        pytest.skip(
+            "QUEPID_MEMBER_API_TOKEN is unset; scoping cannot be tested with an "
+            "administrator token (see quepid_mcp/mcp.py:119)"
+        )
+
+    client = McpClient(MCP_URL, token)
+    client.initialize()
+    yield client
+    client.close()

@@ -97,10 +97,20 @@ export QUEPID_TARGET=8.5.0
 npm test
 ```
 
+`QUEPID_MEMBER_API_TOKEN` is optional and only affects `tests/test_mcp.py`. MCP
+scopes rows to the token owner, but Quepid administrators bypass that scoping,
+so the three scoping tests need a key belonging to a **non-admin** account or
+they would pass whether or not scoping works. They skip when it is unset:
+
+```
+export QUEPID_MEMBER_API_TOKEN=<key for a non-admin user>
+```
+
 Just one module:
 
 ```
 npm run test:books
+npm run test:mcp
 ```
 
 Nothing here fails for want of a stack. With no `QUEPID_API_TOKEN` the
