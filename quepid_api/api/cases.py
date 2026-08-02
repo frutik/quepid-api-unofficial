@@ -51,9 +51,28 @@ class UpdateCase(Schema):
 
 @router.get("/", response=List[Case])
 @paginate
-def view_cases(request):
+def view_cases(request, archived: bool = False):
+    """List cases, hiding archived ones unless `?archived=true` is passed.
+
+    `DELETE /case/{id}/` is a soft delete (see `delete_case`), so without this
+    filter every case ever "deleted" through this API would stay in the list.
+
+    The default branch **excludes 1** rather than filtering on 0. `cases.archived`
+    is `t.boolean "archived"` in Rails -- nullable, no default -- so a case
+    Quepid wrote itself can be NULL, and NULL is a distinct third state from 0
+    that still means "not archived". `.filter(archived=0)` would silently hide
+    those rows.
+    """
     # @todo check rights?
-    return qmodels.Cases.objects.using('quepid').all()
+    cases = qmodels.Cases.objects \
+        .using('quepid')
+
+    if archived:
+        return cases \
+            .filter(archived=1)
+
+    return cases \
+        .exclude(archived=1)
     
     
 @router.post("/", response={200: Case, 400: str})
@@ -132,10 +151,29 @@ def update_case(request, id: int, data: UpdateCase):
         
 @router.delete("/{id}/", response={204: None, 404: None})
 def delete_case(request, id: int):
-    """Delete an existing case"""
+    """Archive an existing case. This is a soft delete -- the row survives.
+
+    A hard delete is not available to us. Rails owns the cascade: `Case` in
+    `app/models/case.rb` declares `dependent: :destroy` for tries, queries,
+    ratings, scores, snapshots, annotations and metadata. `inspectdb` reflects
+    every relation as `DO_NOTHING`, so Django emits no cascade of its own and
+    MySQL refuses the delete outright:
+
+        IntegrityError (1451, 'Cannot delete or update a parent row: a foreign
+        key constraint fails (`db`.`tries`, CONSTRAINT `tries_ibfk_1` ...)')
+
+    Since `create_case` always writes a try alongside the case, that made every
+    case created through this API undeletable through this API.
+
+    Archiving is what Quepid's own UI does with a case you are done with, so the
+    row stays fetchable with `archived = 1` and `PUT /case/{id}/` can set it
+    back to 0. Re-archiving an archived case is a no-op, not an error.
+    """
     case = _by_pk(qmodels.Cases, id)
     if not case:
         return 404, None
-        
-    case.delete(using='quepid')
+
+    case.archived = 1
+    case.updated_at = timezone.now()
+    case.save(using='quepid')
     return 204, None

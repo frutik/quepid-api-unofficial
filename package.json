@@ -4,6 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "test": "python3 -m pytest",
+    "test:books": "python3 -m pytest tests/test_books.py -v",
     "publish": "git push --follow-tags"
   },
   "author": "frutik",
