@@ -12,10 +12,20 @@ that the Rails Quepid app owns and migrates.
 
 ## Quepid compatibility
 
-This release is built against Quepid **8.5.0** and runs against Quepid
-**8.4.0 – 8.5.0**. It does **not** work on Quepid 8.3.7 or older: v8.4.0
-reshaped the `books` table, and the models this API reflects now expect the new
-shape.
+**Pick the release that matches your Quepid.** This app reflects Quepid's
+Rails-owned schema, so each release only runs against the Quepid versions whose
+schema it was generated from.
+
+| This API | Quepid | |
+| --- | --- | --- |
+| **v0.9.0** — unreleased, `main` | **8.4.0 – 8.5.0** | built against 8.5.0 |
+| **v0.8.2** — latest release | **8.0.0 – 8.3.7** | built against 8.1.0 |
+| v0.3.6 – v0.6.0 | 8.0.0 – 8.1.0 | |
+| v0.0.1 – v0.2.11 | 7.15.1 – 7.18.1 | |
+
+The two current lines do **not** overlap, and cannot: v8.4.0 both dropped and
+added `books` columns, so `main` fails on Quepid 8.3.7 and older, and v0.8.2's
+books endpoints fail on 8.4.0 and newer. Pick a side.
 
 Full version matrix, the evidence behind it and what to change when
 re-targeting: [`docs/quepid-compatibility.md`](docs/quepid-compatibility.md).
