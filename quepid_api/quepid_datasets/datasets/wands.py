@@ -3,13 +3,14 @@
 https://github.com/wayfair/WANDS/tree/main/dataset -- three TSVs, of which this
 downloads two: ``query.csv`` and ``label.csv``. ``product.csv`` is the corpus (90
 MB of it), which belongs in a search engine, not in Quepid; wands.ipynb at the
-repo root indexes it into Elasticsearch under the mapping the templates below
-assume.
+repo root indexes it into Elasticsearch with ``name`` and ``description`` as text
+fields and the product id as ``_id``, which is what makes the judgements below
+line up with search results.
 """
 import csv
 from collections import defaultdict
 
-from .base import Dataset, DatasetQuery, Template, multi_match
+from .base import Dataset, DatasetQuery
 
 # Not an LFS repository, so the plain raw host serves the bytes (see fetch.py).
 FILES = 'https://raw.githubusercontent.com/wayfair/WANDS/main/dataset/'
@@ -72,14 +73,5 @@ WANDS = Dataset(
         'query.csv': FILES + 'query.csv',
         'label.csv': FILES + 'label.csv',
     },
-    # Scale 0-3, which is what RATINGS produces.
-    scorer_name='nDCG@10',
-    templates={
-        # Both match the mapping the notebooks index products under: an ES _id
-        # per product, with `name` and `description` as text fields.
-        'baseline': Template(dsl=multi_match(['name', 'description']), field_spec='id:_id, title:name'),
-        'boosted': Template(dsl=multi_match(['name^2', 'description']), field_spec='id:_id, title:name'),
-    },
-    default_template='baseline',
     read=read,
 )

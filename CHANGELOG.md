@@ -40,11 +40,16 @@ observe.
 
 - **Three management commands that build Quepid cases from public relevance
   datasets**, each doing one thing:
-  - **`create_case <dataset> <case name>`** — an empty case and its try,
-    configured for the dataset: query DSL, field spec, and optionally the search
-    endpoint to run it against (`--endpoint-url`, or `--search-endpoint-id` for
-    one you already have). `--template` picks the search configuration,
-    `--search-query-file` swaps in a one-off DSL, `--scorer` / `--scorer-id` the
+  - **`create_case <case name>`** — an empty case and its try: query DSL, field
+    spec, and optionally the search endpoint to run it against
+    (`--endpoint-url`, or `--search-endpoint-id` for one you already have).
+    **It takes no dataset**, deliberately — a case is a search configuration,
+    and none of that follows from the judgements you are about to load, so tying
+    the two together made a case for a *dataset* rather than for an index.
+    `--search-fields` names the fields of the default `multi_match`,
+    `--search-query-file` replaces the DSL outright, `--field-spec`,
+    `--search-engine`, `--mapper-code-file`, `--proxy-requests` and
+    `--endpoint-name` configure the rest, and `--scorer` / `--scorer-id` the
     scorer — which is *resolved*, never left to `CreateCase`'s default of 5.
   - **`load_dataset <dataset> <case id>`** — the queries and judgements, into a
     case that already exists. It creates nothing, so a dataset can go into a case
@@ -87,18 +92,19 @@ observe.
   translates dataset document ids into whatever the engine returns, since Qdrant
   point ids are assigned at index time and are not ASINs. Unmapped judgements
   are dropped and counted rather than posted to score nothing.
-- ESCI's **`qdrant-image` template** reproduces that setup: `searchapi` engine,
-  the articles' `docsMapper`/`numberOfResultsMapper` verbatim,
-  `proxy_requests = 0`, `{"vector": "#$qOption.clip##", "limit": 30,
-  "with_payload": true}` and the `id,title,thumb:thumb` field spec — so
-  `create_case --endpoint-url http://localhost:6333/collections/esci/points/search`
-  produces an endpoint Quepid can actually read. A template is a whole search
-  configuration, not just a DSL.
+- **`quepid_datasets/mappers/qdrant.js`**, the articles'
+  `docsMapper`/`numberOfResultsMapper` verbatim, so that setup is
+  `create_case --search-engine searchapi --mapper-code-file … --proxy-requests 0`
+  with a `{"vector": "#$qOption.clip##", "limit": 30, "with_payload": true}` DSL
+  and the `id,title,thumb:thumb` field spec — an endpoint Quepid can actually
+  read. Flags rather than a canned per-dataset configuration, since none of it
+  is a property of the judgements.
 - `quepid_datasets`, a fifth app, installed only so Django finds those commands.
-  It owns no models and touches no database. Adding a dataset is a module under
-  `quepid_datasets/datasets/` — `wands.py`, `esci.py` over the shared
-  definitions in `base.py` — registered in that package's `__init__.py`; nothing
-  in the commands is dataset-aware. The API client the three share is
+  It owns no models and touches no database. A dataset here is judgements and
+  where to download them, nothing more: adding one is a module under
+  `quepid_datasets/datasets/` — `wands.py`, `esci.py` over the shared `Dataset`
+  and `DatasetQuery` in `base.py` — registered in that package's `__init__.py`.
+  Nothing in the commands is dataset-aware. The API client the three share is
   `quepid_datasets/client.py`, their common flags and error handling
   `base_command.py`.
 - **`pyarrow`** in `quepid_api/requirements.txt` — ESCI ships as parquet.

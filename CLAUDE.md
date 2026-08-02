@@ -283,7 +283,8 @@ below:
 cd quepid_api
 export QUEPID_API_TOKEN=<thor user:add_api_key>
 
-./manage.py create_case wands "wands baseline" \
+./manage.py create_case "wands baseline" \
+  --search-fields "name,description" --field-spec "id:_id, title:name" \
   --endpoint-url http://quepid-api-elasticsearch:9200/wands/_search   # -> case 77
 ./manage.py load_dataset wands 77    # downloads the dataset itself
 ./manage.py list_cases
@@ -332,15 +333,20 @@ The design decisions worth knowing before changing them:
   a schema break reports "231873 failed, here is the first reason" instead of
   stopping with nothing loaded.
 - **The scorer is resolved, never defaulted.** `CreateCase` defaults `scorer_id`
-  to 5 — whichever scorer is fifth in that Quepid. Each dataset names one whose
-  scale covers its ratings (WANDS labels map to 0/2/3 and ESCI's E/S/C/I to
-  3/2/1/0, so `nDCG@10` for both).
-- **A `Template` is a whole search configuration, not a DSL** — field spec,
-  engine, mapper code and `proxy_requests` too, because ESCI's `qdrant-image`
-  needs `searchapi` plus JavaScript to be readable at all, while its `es-title`
-  needs none of that. `create_case --endpoint-url` builds the endpoint from the
-  template, which is the only way a created endpoint is usable without editing
-  it in Quepid afterwards.
+  to 5 — whichever scorer is fifth in that Quepid. `create_case` looks its
+  `--scorer` up by name instead, defaulting to `nDCG@10`, whose 0-3 scale covers
+  every reader here (WANDS labels map to 0/2/3, ESCI's E/S/C/I to 3/2/1/0).
+- **`create_case` takes no dataset, and datasets carry no search configuration.**
+  A case is a DSL, a field spec, a scorer and an endpoint; none of that follows
+  from the judgements about to be loaded into it, and a dataset that also decided
+  how to search would only ever be right for the one index it was written
+  against. So there is no `Template` type and no `--template`: `--search-fields`
+  (or `--search-query-file`), `--field-spec`, `--search-engine`,
+  `--mapper-code-file` and `--proxy-requests` supply it, and the defaults are
+  Quepid's own (`multi_match` over `*`, `id:_id`, `es`). What a `searchapi`
+  endpoint needs to be readable at all — the Qdrant response mapper from the
+  articles — ships as `quepid_datasets/mappers/qdrant.js` for
+  `--mapper-code-file`, not as a canned per-dataset configuration.
 - **`--doc-id-map` and `--query-options-file` are the deliberate escape hatches.**
   Neither ratings' document ids nor per-query vectors survive the trip from a
   dataset to an arbitrary index: Qdrant point ids are assigned when *you* index,
@@ -348,7 +354,7 @@ The design decisions worth knowing before changing them:
   flags are dataset-agnostic, and unmapped judgements are dropped with a count
   rather than posted to score nothing.
 - **One module per dataset under `quepid_datasets/datasets/`.** `base.py` holds
-  what they share (`Dataset`, `Template`, `DatasetQuery`, the small helpers),
+  what they share (`Dataset`, `DatasetQuery`),
   `wands.py` and `esci.py` import from it, and `__init__.py` re-exports both —
   so imports run one way. Putting the shared definitions in `__init__.py`
   instead makes the package and its dataset modules import each other; that

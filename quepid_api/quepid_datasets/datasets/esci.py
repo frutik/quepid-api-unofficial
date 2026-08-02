@@ -5,14 +5,18 @@ https://github.com/amazon-science/esci-data -- this reads
 only. The product metadata (titles, images) is a separate ESCI-S download and a
 corpus concern, like WANDS' ``product.csv``.
 
-The qdrant-image template below rebuilds the case from these two articles, which
-embed the product images with CLIP and search them with an embedding of the
-query text:
+These judgements are what these two articles score, embedding the product images
+with CLIP and searching them with an embedding of the query text:
 
 - part 1: https://frutik.medium.com/how-to-evaluate-image-search-in-qdrant-using-quepid-and-the-hacks-it-takes-part-1-f8167ec5cba3
 - part 2: https://frutik.medium.com/how-to-evaluate-image-search-in-qdrant-using-quepid-and-the-hacks-it-takes-part-2-hacks-39ed553cd97a
+
+The case that setup needs is built with ``create_case`` flags -- a ``searchapi``
+endpoint, ``quepid_datasets/mappers/qdrant.js`` as its ``--mapper-code-file``,
+and a ``#$qOption.clip##`` DSL; see the README. Nothing about it belongs to this
+dataset: the same ASINs are equally worth running against a plain text index.
 """
-from .base import Dataset, DatasetQuery, Template, multi_match
+from .base import Dataset, DatasetQuery
 
 # esci-data keeps its parquet in Git LFS, so this has to be the github.com/raw
 # form -- raw.githubusercontent.com serves the 133-byte pointer (see fetch.py).
@@ -37,26 +41,6 @@ RATINGS = {
 LOCALE = 'us'
 SPLIT = 'test'
 SMALL_VERSION = 1
-
-# Quepid cannot read a Qdrant response, so search_engine="searchapi" hands it to
-# this JavaScript instead. Verbatim from part 2, which is also where `thumb`
-# comes from: Quepid renders it as the result's thumbnail, which is the whole
-# point of judging an image search.
-QDRANT_MAPPER = """numberOfResultsMapper = function(data){
-  return data.result.length;
-};
-
-docsMapper = function(data){
-  let docs = [];
-  for (let doc of data.result) {
-    docs.push ({
-      id: doc.id,
-      thumb: doc.payload.image,
-      title: doc.payload.title,
-    });
-  }
-  return docs;
-};"""
 
 
 def read(path):
@@ -121,36 +105,5 @@ ESCI = Dataset(
                 'judgements, keyed by ASIN. The US small-version test split: 8956 queries, '
                 '181701 judgements.',
     files={EXAMPLES: EXAMPLES_URL},
-    scorer_name='nDCG@10',
-    templates={
-        # Assumes a text index whose document ids are ASINs, with a `title`
-        # field -- the natural way to index the ESCI-S metadata, and what makes
-        # the judgements above line up with search results as they are.
-        'es-title': Template(
-            dsl=multi_match(['title']),
-            field_spec='id:_id, title:title',
-        ),
-        # The setup from the articles: CLIP image embeddings in Qdrant, searched
-        # with a text embedding of the query. Quepid has no idea how to talk to
-        # Qdrant, hence searchapi + a mapper; the vector arrives per query
-        # through the options, not through the DSL.
-        'qdrant-image': Template(
-            dsl={'vector': '#$qOption.clip##', 'limit': 30, 'with_payload': True},
-            field_spec='id,title,thumb:thumb',
-            search_engine='searchapi',
-            mapper_code=QDRANT_MAPPER,
-            # The browser calls Qdrant directly in the articles' setup.
-            proxy_requests=0,
-        ),
-    },
-    default_template='es-title',
     read=read,
-    requires={
-        'qdrant-image': (
-            '--query-options-file, holding the CLIP vector per query as '
-            '{"query text": {"clip": [...]}}, and normally --doc-id-map, since Qdrant '
-            'point ids are assigned at index time and are not ASINs. See the articles '
-            'in quepid_datasets/datasets/esci.py'
-        ),
-    },
 )

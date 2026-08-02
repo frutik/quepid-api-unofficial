@@ -92,7 +92,7 @@ It is what [`wands.ipynb`](wands.ipynb) does, as commands.
 
 | | |
 | --- | --- |
-| [`create_case <dataset> <name>`](#create_case) | an empty case, configured for a dataset — query DSL, field spec, and optionally the search endpoint |
+| [`create_case <name>`](#create_case) | an empty case — query DSL, field spec, and optionally the search endpoint |
 | [`load_dataset <dataset> <case id>`](#load_dataset) | that dataset's queries and judgements, into an existing case |
 | [`list_cases`](#list_cases) | which cases exist, and which are already filled |
 
@@ -106,11 +106,13 @@ path, which is coverage the test suite never reaches.)
 export QUEPID_API_TOKEN=<your api token>       # thor user:add_api_key
 cd quepid_api
 
-./manage.py create_case wands "wands baseline" \
+./manage.py create_case "wands baseline" \
+  --search-fields "name,description" \
+  --field-spec "id:_id, title:name" \
   --endpoint-url http://quepid-api-elasticsearch:9200/wands/_search
 # Created search endpoint 12 at http://quepid-api-elasticsearch:9200/wands/_search.
-# Created case 77 "wands baseline" (wands/baseline).
-# Fill it: manage.py load_dataset wands 77
+# Created case 77 "wands baseline".
+# Fill it: manage.py load_dataset <dataset> 77
 
 ./manage.py load_dataset wands 77
 # Loading into case 77 "wands baseline".
@@ -173,17 +175,25 @@ image** if you are running inside Compose.
 ### create_case
 
 Creates the case and its try, and — with `--endpoint-url` — the search endpoint
-too, configured from one of the dataset's templates. A case that can actually run
-needs an endpoint: either one you already have (`--search-endpoint-id`) or one
-created for you, at a URL reachable **from Quepid**, not from you.
+too. A case that can actually run needs an endpoint: either one you already have
+(`--search-endpoint-id`) or one created for you, at a URL reachable **from
+Quepid**, not from you.
+
+**It takes no dataset.** A case is a search configuration — a DSL, a field spec,
+a scorer, somewhere to send the query — and none of that follows from which
+judgements you are about to load into it. Everything comes from the flags below,
+so the same WANDS judgements can go into cases pointed at whatever you have
+indexed, however you indexed it.
 
 | | |
 | --- | --- |
-| `--template <name>` | the search configuration: query DSL, field spec, and the engine and mapper of a created endpoint. `wands`: `baseline`, `boosted`. `esci`: `es-title`, `qdrant-image` |
-| `--search-query-file q.json` | a one-off DSL instead of the template's, e.g. the reranked variants from the notebooks. The rest of the template still applies |
+| `--search-fields "name^2,description"` | fields for the default `multi_match` DSL. Default: `*` |
+| `--search-query-file q.json` | a DSL of your own instead, e.g. the reranked variants from the notebooks. Must contain `#$query##`, which Quepid replaces with each query |
+| `--field-spec "id:_id, title:name"` | how a hit becomes a displayable document. Default: `id:_id`, Quepid's own |
 | `--endpoint-url` / `--search-endpoint-id` | create an endpoint for the case, or point it at an existing one |
-| `--scorer nDCG@10` / `--scorer-id` | scorer for the case; the default is the one whose scale matches the dataset's ratings |
-| `--field-spec` | override the template's field spec |
+| `--endpoint-name` / `--search-engine` / `--api-method` / `--proxy-requests` | how a created endpoint is configured. Defaults: the case name, `es`, `POST`, `1` |
+| `--mapper-code-file m.js` | JavaScript mapping a response Quepid cannot read by itself, for `--search-engine searchapi` |
+| `--scorer nDCG@10` / `--scorer-id` | scorer for the case. The name is *resolved*, never left to the API's default of id 5 |
 | `--dry-run` | resolve everything, write nothing |
 
 ### load_dataset
@@ -225,10 +235,12 @@ how you tell a filled case from an empty one.
 
 ### Image search in Qdrant
 
-The `qdrant-image` template rebuilds the case from [*How to evaluate image
-search in Qdrant using Quepid*](https://frutik.medium.com/how-to-evaluate-image-search-in-qdrant-using-quepid-and-the-hacks-it-takes-part-1-f8167ec5cba3):
-a `searchapi` endpoint with the article's response mapper, the
-`{"vector": "#$qOption.clip##", …}` DSL, and thumbnails in the results.
+The case from [*How to evaluate image search in Qdrant using
+Quepid*](https://frutik.medium.com/how-to-evaluate-image-search-in-qdrant-using-quepid-and-the-hacks-it-takes-part-1-f8167ec5cba3)
+is `create_case` flags: a `searchapi` endpoint with the article's response mapper
+(shipped as
+[`quepid_datasets/mappers/qdrant.js`](quepid_api/quepid_datasets/mappers/qdrant.js)),
+the `{"vector": "#$qOption.clip##", …}` DSL, and thumbnails in the results.
 
 Two things no dataset can provide, because both are created when *you* index the
 corpus:
@@ -242,7 +254,14 @@ corpus:
   dropped and counted.
 
 ```
-./manage.py create_case esci "images search" --template qdrant-image \
+echo '{"vector": "#$qOption.clip##", "limit": 30, "with_payload": true}' > qdrant.json
+
+./manage.py create_case "images search" \
+  --search-query-file qdrant.json \
+  --field-spec "id,title,thumb:thumb" \
+  --search-engine searchapi \
+  --mapper-code-file quepid_datasets/mappers/qdrant.js \
+  --proxy-requests 0 \
   --endpoint-url http://localhost:6333/collections/esci/points/search
 
 ./manage.py load_dataset esci 78 \

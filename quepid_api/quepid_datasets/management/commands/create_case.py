@@ -1,10 +1,16 @@
-"""``manage.py create_case <dataset> <case name>`` -- an empty case, configured.
+"""``manage.py create_case <case name>`` -- an empty case, configured.
 
 The half of the old ``load_dataset`` that wrote a case rather than data. It
 creates the case and its try -- and, given ``--endpoint-url``, the search
-endpoint too -- from one of the dataset's templates, so a Qdrant case comes out
-with the right engine, mapper and DSL instead of needing them typed into
-Quepid's UI afterwards.
+endpoint too -- from flags alone.
+
+It knows nothing about datasets, deliberately. A case is a search
+configuration: a query DSL, a field spec, a scorer and somewhere to send the
+query. None of that follows from which judgements you are about to load, and
+tying the two together made a case for a *dataset* rather than for an index --
+so the same WANDS judgements could not be pointed at a differently built index
+without inventing a dataset for it. Everything the command needs now arrives as
+a flag, and the defaults are Quepid's own rather than any dataset's.
 
 Then fill it: ``manage.py load_dataset <dataset> <case id>``.
 """
@@ -14,39 +20,71 @@ from pathlib import Path
 from django.core.management.base import CommandError
 
 from quepid_datasets.base_command import QuepidCommand
-from quepid_datasets.datasets import DATASETS
+
+# Quepid substitutes the query text for this token when it runs a try, so a
+# stored DSL carries it verbatim. `#$qOption.<name>##` does the same for a key of
+# the query's options -- which is how a per-query vector reaches the engine, and
+# what load_dataset's --query-options-file fills in.
+QUERY_TOKEN = '#$query##'
+
+# What the notebooks at the repo root post, and the shape of Quepid's own
+# Elasticsearch default. `*` rather than named fields because this command has no
+# idea what is in your index; --search-fields is how you say.
+DEFAULT_SEARCH_FIELDS = ['*']
+
+# Quepid's Elasticsearch default. Anything richer names fields that only some
+# index has.
+DEFAULT_FIELD_SPEC = 'id:_id'
+
+# Scale 0-3, which is what every reader in quepid_datasets/datasets/ produces.
+# Resolved by name against the running Quepid, never passed through as an id:
+# CreateCase defaults scorer_id to 5, which is whichever scorer happens to be
+# fifth there.
+DEFAULT_SCORER = 'nDCG@10'
+
+
+def multi_match(fields):
+    """The plain Elasticsearch query used when no DSL file is given."""
+    return {
+        'query': {
+            'multi_match': {
+                'query': QUERY_TOKEN,
+                'fields': list(fields),
+            }
+        }
+    }
 
 
 class Command(QuepidCommand):
     help = (
-        'Create an empty Quepid case configured for a dataset -- its try\'s query DSL and '
-        'field spec, and optionally the search endpoint to run it against.'
+        'Create an empty Quepid case -- its try\'s query DSL and field spec, and optionally '
+        'the search endpoint to run it against. Fill it with `manage.py load_dataset`.'
     )
 
     def add_arguments(self, parser):
         super().add_arguments(parser)
         parser.add_argument(
-            'dataset',
-            choices=sorted(DATASETS),
-            help='Dataset the case is for; its templates decide the search configuration.',
-        )
-        parser.add_argument(
             'case_name',
             help='Name of the case to create. Quepid does not require it to be unique.',
         )
         parser.add_argument(
-            '--template',
-            help='Search configuration to build the case around -- query DSL, field spec and, '
-                 'for a created endpoint, its engine and mapper. Named per dataset: ' + '; '.join(
-                     f'{d.name}: {", ".join(sorted(d.templates))} (default {d.default_template})'
-                     for d in DATASETS.values()
-                 ),
+            '--search-query-file',
+            help='File holding the try\'s query DSL as JSON. Must contain the '
+                 f'{QUERY_TOKEN} token wherever the query text belongs -- Quepid substitutes '
+                 'each query for it. Without this, a multi_match over --search-fields.',
         )
         parser.add_argument(
-            '--search-query-file',
-            help='File holding a query DSL as JSON, used instead of the template\'s. Must contain '
-                 'the #$query## token wherever the query text belongs. The rest of the template '
-                 'still applies.',
+            '--search-fields',
+            metavar='FIELDS',
+            help='Comma-separated fields for the default multi_match DSL, boosts included, e.g. '
+                 f'`--search-fields "name^2,description"`. Default: {",".join(DEFAULT_SEARCH_FIELDS)}. '
+                 'Not usable with --search-query-file, which replaces the DSL outright.',
+        )
+        parser.add_argument(
+            '--field-spec',
+            default=DEFAULT_FIELD_SPEC,
+            help='Quepid field spec for the try -- how a search hit becomes a displayable '
+                 f'document, e.g. `id:_id, title:name`. Default: {DEFAULT_FIELD_SPEC}.',
         )
         parser.add_argument(
             '--search-endpoint-id',
@@ -60,15 +98,34 @@ class Command(QuepidCommand):
                  'http://quepid-api-elasticsearch:9200/wands/_search.',
         )
         parser.add_argument(
+            '--endpoint-name',
+            help='Name of the endpoint created by --endpoint-url. Defaults to the case name.',
+        )
+        parser.add_argument(
             '--search-engine',
             choices=['solr', 'es', 'opensearch', 'searchapi'],
-            help='Engine of the endpoint created by --endpoint-url. Defaults to the '
-                 'template\'s, which is what its DSL and mapper are written for.',
+            default='es',
+            help='Engine of the endpoint created by --endpoint-url. Default: es. Use searchapi '
+                 'with --mapper-code-file for an engine Quepid cannot read by itself.',
         )
         parser.add_argument(
             '--api-method',
             default='POST',
             help='HTTP method of the endpoint created by --endpoint-url. Default: POST.',
+        )
+        parser.add_argument(
+            '--mapper-code-file',
+            help='File of JavaScript mapping a non-Solr/ES response into documents Quepid can '
+                 'show -- `docsMapper` and `numberOfResultsMapper`. Only meaningful with '
+                 '--search-engine searchapi.',
+        )
+        parser.add_argument(
+            '--proxy-requests',
+            type=int,
+            choices=[0, 1],
+            default=1,
+            help='1 has Quepid make the search request server-side, so the engine only has to '
+                 'be reachable from Quepid. 0 has the browser call it directly. Default: 1.',
         )
         parser.add_argument(
             '--scorer-id',
@@ -77,12 +134,9 @@ class Command(QuepidCommand):
         )
         parser.add_argument(
             '--scorer',
-            help='Scorer for the case, by name. Defaults to the dataset\'s, which matches '
-                 'its rating scale.',
-        )
-        parser.add_argument(
-            '--field-spec',
-            help='Quepid field spec for the try. Defaults to the template\'s.',
+            default=DEFAULT_SCORER,
+            help=f'Scorer for the case, by name. Default: {DEFAULT_SCORER}, whose 0-3 scale '
+                 'covers the ratings every dataset here produces.',
         )
         parser.add_argument(
             '--dry-run',
@@ -91,84 +145,88 @@ class Command(QuepidCommand):
         )
 
     def run(self, **options):
-        dataset = DATASETS[options['dataset']]
-        template_name, template = self._template(dataset, options)
-        query_params = self._query_params(template, options)
-        scorer_id = self._scorer_id(dataset, options)
+        query_params = self._query_params(options)
+        scorer_id = self._scorer_id(options)
 
         if options['dry_run']:
             self.stdout.write(self.style.WARNING(
                 f'--dry-run: nothing written. Would create a case "{options["case_name"]}" '
-                f'from {dataset.name}/{template_name} with scorer_id={scorer_id}, '
-                f'field spec "{options["field_spec"] or template.field_spec}" and DSL '
+                f'with scorer_id={scorer_id}, field spec "{options["field_spec"]}" and DSL '
                 f'{query_params}.'
             ))
             return
 
-        endpoint_id = self._search_endpoint_id(dataset, template, options)
+        endpoint_id = self._search_endpoint_id(options)
         case = self.api.post('/case/', {
             'name': options['case_name'],
             'scorer_id': scorer_id,
             'search_endpoint_id': endpoint_id,
             'search_query': query_params,
-            'fields_mapping': options['field_spec'] or template.field_spec,
+            'fields_mapping': options['field_spec'],
             'nightly': 1,
         })
 
         self.stdout.write(self.style.SUCCESS(
-            f'Created case {case["id"]} "{options["case_name"]}" '
-            f'({dataset.name}/{template_name}).'
+            f'Created case {case["id"]} "{options["case_name"]}".'
         ))
         if endpoint_id is None:
             self.stdout.write(self.style.WARNING(
                 'It has no search endpoint, so it cannot run yet -- pick one in Quepid, or '
                 'pass --search-endpoint-id / --endpoint-url next time.'
             ))
-        if needed := dataset.requires.get(template_name):
-            self.stdout.write(self.style.WARNING(f'{template_name} needs {needed}'))
 
-        self.stdout.write(f'Fill it: manage.py load_dataset {dataset.name} {case["id"]}')
+        self.stdout.write(f'Fill it: manage.py load_dataset <dataset> {case["id"]}')
 
-    def _template(self, dataset, options):
-        """The search configuration to build the case around, by name."""
-        name = options['template'] or dataset.default_template
-        if name not in dataset.templates:
-            raise CommandError(
-                f'{dataset.name} has no template "{name}". '
-                f'Available: {", ".join(sorted(dataset.templates))}.'
-            )
-        return name, dataset.templates[name]
-
-    def _query_params(self, template, options):
+    def _query_params(self, options):
         """The query DSL to store on the try, as the JSON string Quepid holds.
 
-        ``--search-query-file`` replaces the DSL only: the field spec, engine and
-        mapper around it still come from the template, since a hand-written DSL
-        is usually a variant of one (a reranked WANDS query, say), not a
-        different engine.
+        Either a file or the default multi_match, never a mix: a hand-written DSL
+        that reranks or vector-searches has nowhere to put a field list, so
+        silently ignoring --search-fields alongside one would be a lie.
         """
-        dsl = template.dsl
-        if file_path := options['search_query_file']:
+        file_path = options['search_query_file']
+        if file_path and options['search_fields']:
+            raise CommandError(
+                '--search-fields only builds the default DSL, which --search-query-file '
+                'replaces. Pass one or the other.'
+            )
+
+        if file_path:
             try:
                 dsl = json.loads(Path(file_path).read_text())
             except (OSError, ValueError) as e:
                 raise CommandError(f'Could not read a query DSL from {file_path}: {e}')
+            if QUERY_TOKEN not in json.dumps(dsl):
+                # Not fatal -- a DSL can be driven entirely by #$qOption.<name>##,
+                # as the Qdrant setup is -- but a missing token usually means the
+                # same query runs for all 480 rows.
+                self.stdout.write(self.style.WARNING(
+                    f'{file_path} contains no {QUERY_TOKEN}, so every query will run the '
+                    f'same search unless it uses #$qOption.<name>## instead.'
+                ))
+        elif fields := options['search_fields']:
+            names = [f.strip() for f in fields.split(',') if f.strip()]
+            if not names:
+                raise CommandError(f'--search-fields "{fields}" names no fields.')
+            dsl = multi_match(names)
+        else:
+            dsl = multi_match(DEFAULT_SEARCH_FIELDS)
 
         # CreateCase declares search_query as a str: tries.query_params is a
         # varchar(20000) holding the DSL as text.
         return json.dumps(dsl)
 
-    def _scorer_id(self, dataset, options):
-        """Resolve the case's scorer: explicit id, explicit name, the dataset's.
+    def _scorer_id(self, options):
+        """Resolve the case's scorer: explicit id, else the name, resolved.
 
-        The dataset names one whose scale covers its ratings. Leaving it to the
-        API is not an option: ``CreateCase`` defaults ``scorer_id`` to 5, which
-        is whichever scorer happens to be fifth in this Quepid.
+        Leaving it to the API is not an option: ``CreateCase`` defaults
+        ``scorer_id`` to 5, which is whichever scorer happens to be fifth in this
+        Quepid.
         """
         if scorer_id := options['scorer_id']:
             return scorer_id
 
-        name = options['scorer'] or dataset.scorer_name
+        name = options['scorer']
         scorers = self.api.rows('/scorers/')
         for scorer in scorers:
             if scorer['name'] == name:
@@ -180,7 +238,7 @@ class Command(QuepidCommand):
             f'{", ".join(sorted(s["name"] for s in scorers)) or "none"}.'
         )
 
-    def _search_endpoint_id(self, dataset, template, options):
+    def _search_endpoint_id(self, options):
         """The endpoint the case's try points at, existing or newly created."""
         if endpoint_id := options['search_endpoint_id']:
             # Cheap existence check, so a typo fails before the case exists
@@ -201,14 +259,22 @@ class Command(QuepidCommand):
             return None
 
         endpoint = self.api.post('/search_endpoints/', {
-            'name': dataset.name,
+            'name': options['endpoint_name'] or options['case_name'],
             'endpoint_url': url,
-            # The engine, the mapper and the proxying belong to the template:
-            # they are what makes its DSL and its response readable to Quepid.
-            'search_engine': options['search_engine'] or template.search_engine,
+            'search_engine': options['search_engine'],
             'api_method': options['api_method'],
-            'mapper_code': template.mapper_code,
-            'proxy_requests': template.proxy_requests,
+            'mapper_code': self._mapper_code(options),
+            'proxy_requests': options['proxy_requests'],
         })
         self.stdout.write(f'Created search endpoint {endpoint["id"]} at {url}.')
         return endpoint['id']
+
+    def _mapper_code(self, options):
+        """The response mapper for a searchapi endpoint, read from its file."""
+        if not (file_path := options['mapper_code_file']):
+            return None
+
+        try:
+            return Path(file_path).read_text()
+        except OSError as e:
+            raise CommandError(f'Could not read mapper code from {file_path}: {e}')
