@@ -59,7 +59,7 @@ def create_book(request, data: CreateBook):
             show_rank=1 if data.show_rank else 0,
             created_at=now,
             updated_at=now,
-            owner_id=request.auth
+            owner_id=request.auth.id
         )
     except Exception as e:
         return 400, str(e)

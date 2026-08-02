@@ -79,6 +79,12 @@ tag triggers `.github/workflows/docker-image.yml`, which builds and pushes the
 `app` and `web` Docker targets. `APP_VERSION` env var feeds the version shown in
 the OpenAPI schema.
 
+**Every behaviour change gets a `CHANGELOG.md` entry under `[Unreleased]`, in
+the same commit as the change** — not afterwards and not at release time.
+`CHANGELOG.md` explains the format and what belongs there. Changes to which
+Quepid versions this code supports go there *and* in
+`docs/quepid-compatibility.md`.
+
 ## The Rails-owned schema — the central constraint
 
 `quepid/models.py` is **`inspectdb` output** reflecting Quepid's Rails schema.

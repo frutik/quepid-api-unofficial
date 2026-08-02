@@ -1,9 +1,11 @@
 {
   "name": "quepid-api-unofficial",
   "version": "0.8.2",
-  "description": "",
+  "description": "Unofficial Quepid API: an OpenAPI 3.1 HTTP API and a read-only MCP server over a Quepid database",
   "main": "index.js",
   "scripts": {
+    "test": "python3 -m pytest",
+    "test:books": "python3 -m pytest tests/test_books.py -v",
     "publish": "git push --follow-tags"
   },
   "author": "frutik",

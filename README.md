@@ -1,6 +1,14 @@
 # quepid-api-unofficial
-Unofficial API for Quepid.
-Supposed to be stateless and does not use its own database.
+
+An unofficial API for [Quepid](https://github.com/o19s/quepid), in two surfaces:
+
+- an **HTTP API** described by **OpenAPI 3.1**, browsable at `/api/docs`
+- a read-only **MCP server** at `/mcp/mcp`, publishing 14 collections to LLM
+  clients
+
+Both accept the same bearer tokens as the official Quepid API. The app is
+stateless: it has no database of its own, and reads and writes the MySQL schema
+that the Rails Quepid app owns and migrates.
 
 ## Quepid compatibility
 
@@ -59,6 +67,48 @@ open in the browser
 ## Run locally connecting to your self-hosted Quepid
 
 please specify in `.env` correct connection parameters for quepid mysql database
+
+## Tests
+
+The tests drive the API over HTTP, so they need the stack from
+"Run locally" above already running. They never import Django.
+
+> ⚠️ **They write to whatever database you point them at** — creating and
+> deleting teams, scorers, search endpoints, cases, queries, ratings and books.
+> Use a throwaway stack, never a Quepid whose data you care about.
+
+`docker-compose.yml` pins published image tags alongside `build:`, so build
+first or you will be testing the last release instead of your working copy:
+
+```
+docker compose build
+docker compose up -d
+```
+
+Then point the tests at it. `QUEPID_API_TOKEN` is the key from
+`thor user:add_api_key`; `QUEPID_TARGET` is the Quepid version the stack runs
+(`docker-compose.yml`), which selects the expected `/api/books` shape across the
+v8.4.0 schema change.
+
+```
+export QUEPID_API_TOKEN=<your api token>
+export QUEPID_TARGET=8.3.6
+npm test
+```
+
+Just one module:
+
+```
+npm run test:books
+```
+
+Nothing here fails for want of a stack. With no `QUEPID_API_TOKEN` the
+authenticated tests skip and only the handful checking that endpoints reject
+unauthenticated calls still run; with nothing listening at all, every test skips.
+
+`DELETE /api/case/{id}/` is a soft delete, so each run leaves its cases behind
+with `archived = 1`. They are hidden from `GET /api/case/` by default; see
+`tests/conftest.py` for the sweep query.
 
 ## Deploy to Kubernetes
 
