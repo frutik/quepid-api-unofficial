@@ -15,98 +15,63 @@ Quepid versions the code still runs against.
 
 | Question | Answer |
 | --- | --- |
-| Schema `models.py` was generated from | Quepid **v8.1.0** (`schema.rb` version `2025_02_25_162317`) — v8.0.x is column-identical |
-| Versions the code runs against cleanly | **v8.0.0 – v8.3.7** |
-| First version that breaks it | **v8.4.0** (books lose `selection_strategy_id` *and* `scorer_id`) |
-| Version the dev stack starts | **8.3.6** (`docker-compose.yml:77`) |
-| Version the `quepid/` submodule is pinned to | `5f53d8f`, 2026-06-23 — **v8.5.0 + 83 commits**, i.e. unreleased 8.6.0 (`schema.rb` version `2026_03_15_000000`) |
+| Schema `models.py` was generated from | Quepid **v8.5.0** (`schema.rb` version `2026_01_14_150154`) |
+| Versions the code runs against cleanly | **v8.4.0 – v8.5.0** |
+| Last version that breaks it | **v8.3.7** and older (books have no `scale`; `mapper_wizard_states` absent) |
+| Version the dev stack starts | **8.5.0** (`docker-compose.yml:77`) |
+| Version the `quepid/` submodule is pinned to | **v8.5.0** (`1ba948d7`) |
 
-Three different versions, then. The dev stack (8.3.6) is inside the supported
-range, so local development works. The submodule pin is reference material only
-(see `CLAUDE.md`) and is **13 months of schema drift ahead** of the models — do
-not read `quepid/db/schema.rb` as a description of the database this code talks
-to.
+All four now agree. That is new: before the v8.5.0 upgrade the models reflected
+v8.1.0, the dev stack ran 8.3.6 and the submodule pointed at an unreleased
+8.6.0-dev, so `quepid/db/schema.rb` described none of them. It is now a faithful
+description of the database this code talks to.
+
+The supported range is **narrow and has moved up, not widened**. v8.4.0 is a
+hard floor: `models.py` declares `books.scale`, `books.scale_with_labels` and
+`books.scoring_guidelines`, which do not exist before it. This release does
+**not** run against v8.3.x — see [Our tags vs their tags](#our-tags-vs-their-tags).
 
 ---
 
-## How the baseline was established
+## Hand-patches carried across regenerations
 
-`models.py` carries no version marker, so it is dated by bracketing it between
-Rails migrations — columns it *has* versus columns it *lacks*:
+`CLAUDE.md` requires `models.py` to stay pure `inspectdb` output. In practice
+three deliberate deviations have accumulated, each one load-bearing, and **a
+regeneration silently drops all three**. That is the single most dangerous step
+in re-targeting this project, so they are listed here rather than left to be
+rediscovered from `git log`.
 
-| Evidence in `models.py` | Migration | Conclusion |
-| --- | --- | --- |
-| `Users.system_prompt` present | `20250115111655` rename `prompt` → `system_prompt` | after 2025-01-15 |
-| no `permissions` table | `20250118025829` drop `permissions` | after 2025-01-18 |
-| `CaseScores.scorer_id` present | `20250204192202` add scorer to scores | after 2025-02-04 |
-| **no `Users.options`** | `20250310172421` add options to users | before 2025-03-10 |
-| column still named `openai_key` (commented out, `models.py:769`) | `20250314170144` rename → `llm_key` | before 2025-03-14 |
+| Field | Change | Origin | Why it is needed |
+| --- | --- | --- | --- |
+| `SearchEndpoints.owner` | `owner_id` IntegerField → `ForeignKey('Users')` | `989b68d` | `api/search_endpoints.py:60` assigns `owner=request.auth`, a `Users` *instance* |
+| `Tries.search_endpoint` | `search_endpoint_id` BigIntegerField → `ForeignKey('SearchEndpoints')` | `05ece2d` | `api/cases.py:102` assigns an instance; `quepid_mcp/mcp.py` publishes it as a real reference |
+| `CaseScores.queries` | `TextField` → `BinaryField` | `381ff88` | the column is `mediumblob`; `inspectdb` guesses `TextField` for blobs |
 
-That interval contains exactly one schema version, `2025_02_25_162317`, which is
-what `git show v8.1.0:db/schema.rb` reports. Table-level check agrees: `models.py`
-has `selection_strategies` (dropped in 8.4.0) and lacks `mapper_wizard_states`
-(added in 8.4.0).
+Neither FK exists as a database constraint — `tries` carries only
+`tries_ibfk_1` on `case_id`, and `search_endpoints` has none at all — so
+`inspectdb` has no way to infer them and emits plain integer fields every time.
+Reverting either one reintroduces the same class of bug `tests/test_books.py:37`
+documents for books: passing a model instance into an `IntegerField`, which
+Django cannot adapt, failing inside a broad `except Exception` as a bare 400.
 
-Columns alone cannot separate v8.1.0 from v8.0.0 / v8.0.1 — the entire
-`db/schema.rb` diff between v8.0.0 and v8.1.0 is the version stamp plus one
-renamed index on `announcements`. v8.1.0 is simply the newest release that
-matches. v7.18.1 and earlier do not: at schema `2024_06_26_181338` the
-`permissions` table still exists and `users.system_prompt` is still called
-`prompt`, so `Users` reads fail outright.
+A fourth hand-patch has now **retired**: `34e6b32` commented out
+`Users.openai_key` as a shim for v8.2.0+, where Rails renamed the column to
+`llm_key`. Regenerating against v8.5.0 brings it back correctly named, so the
+comment is gone. `llm_key` is Rails-encrypted at rest, but `Users` is published
+nowhere — no schema, no router, no MCP toolset — so no client ever sees the
+ciphertext.
 
-### Corroboration from this repo's own history
+A fifth, `6d79016`, removed a hand-added `ApiKeys.check_token` classmethod and
+is the origin of the pure-`inspectdb` rule. Do not reintroduce it.
 
-The schema bracketing above is inferred. Git history confirms it directly:
+**After every regeneration, verify with:**
 
-```
-caf51b9  2025-05-10  docker-compose.yml pins  o19s/quepid:8.1.0
-34e6b32  2026-01-07  docker-compose.yml pins  o19s/quepid:8.3.6
-```
-
-For eight months the dev stack ran **exactly 8.1.0** — the version the models
-reflect. That is when `inspectdb` was run.
-
-The bump to 8.3.6 is where the drift starts, and commit `34e6b32` shows how it
-was handled. Its *entire* change to `models.py` is one line:
-
-```diff
--    openai_key = models.CharField(max_length=255, blank=True, null=True)
-+    # openai_key = models.CharField(max_length=255, blank=True, null=True)
+```bash
+git diff quepid_api/quepid/models.py \
+  | grep -E '^[-+].*(owner|search_endpoint|queries) = '
 ```
 
-That is not a cosmetic edit. Quepid renamed `users.openai_key` → `llm_key` in
-`20250314170144` (shipped in v8.2.0), so on the newly pinned 8.3.6 every `Users`
-read — i.e. every authenticated request — was selecting a column that no longer
-existed. Commenting the field out is a **hand-patch standing in for a
-regeneration**, and it is the one deviation from the "pure `inspectdb` output"
-rule in `CLAUDE.md`. Treat `models.py:769` as a compatibility shim for v8.2.0+,
-not as dead code: uncommenting it breaks the app on anything newer than v8.1.0,
-and regenerating `models.py` will reintroduce the column under its new name.
-
-### Corroboration from the notebooks
-
-The five notebooks at the repo root (`main.ipynb`, `MMR.ipynb`, `wands.ipynb`,
-`qwen-reranker.ipynb`, `qwen-embeddings.ipynb`) each drive a live stack through
-this API, and their saved outputs are dated:
-
-| Run (from `created_at` in saved responses) | Quepid then pinned |
-| --- | --- |
-| 2025-08-14 / 2025-08-15 | 8.1.0 |
-| 2026-01-04 / 2026-01-07 | 8.1.0 → 8.3.6 changeover |
-| 2026-03-03 | 8.3.6 |
-
-Those runs are the practical evidence for the ✅ rows in the matrix: cases,
-queries, ratings, scorers, teams and search endpoints all round-tripped against
-8.3.6 with 8.1.0-era models. Two caveats:
-
-- **No notebook ever calls `/api/books`.** The one code path that breaks in
-  v8.4.0 is the one path never exercised, so its passing history proves nothing
-  about it.
-- **The markdown note above the `thor user:add_api_key` cell is stale.** It says
-  the command "is only available in nightly build of Quepid" — true when written,
-  but the command landed upstream in `09b77445` (2025-07-19) and shipped in
-  **v8.2.0**. With the current 8.3.6 pin the caveat no longer applies, matching
-  the bootstrap instructions in `CLAUDE.md`, which list it unconditionally.
+Three deletions with no matching additions means the patches were dropped.
 
 ---
 
@@ -114,31 +79,28 @@ queries, ratings, scorers, teams and search endpoints all round-tripped against
 
 | Quepid | `schema.rb` version | Status | Notes |
 | --- | --- | --- | --- |
-| ≤ v7.18.1 | `2024_06_26_181338` | ❌ broken | `users.system_prompt` is still `prompt`; `permissions` table still present |
-| v8.0.0 / v8.0.1 | `2025_02_12_153702` | ✅ works | column-identical to the baseline (differs by one index name) |
-| **v8.1.0** | `2025_02_25_162317` | ✅ **exact match** | the baseline |
-| v8.2.0 / v8.2.1 | `2025_07_09_144954` | ✅ works | `queries.options` and `query_doc_pairs.options` silently became `json` — see [Soft drift](#soft-drift) |
-| v8.3.0 – v8.3.7 | `2025_09_30_…` / `2025_10_24_…` | ✅ works | `books.archived` added (`NOT NULL DEFAULT false`, so inserts still succeed); invisible to this API |
-| **v8.4.0** | `2026_01_02_125621` | ❌ **broken** | `books.selection_strategy_id` **and** `books.scorer_id` removed, `selection_strategies` table dropped |
-| v8.5.0 | `2026_01_14_150154` | ❌ broken | same, plus more additive columns |
-| v8.6.0-dev (submodule pin) | `2026_03_15_000000` | ❌ broken | same, plus `search_endpoints.basic_auth_credential` now encrypted at rest |
+| ≤ v8.3.7 | ≤ `2025_10_24_…` | ❌ broken | `books.scale` / `scale_with_labels` / `scoring_guidelines` do not exist yet; every books endpoint fails in the SELECT list |
+| **v8.4.0** | `2026_01_02_125621` | ✅ works | first version with the post-`selection_strategies` books shape |
+| **v8.5.0** | `2026_01_14_150154` | ✅ **exact match** | the baseline, and what the dev stack and submodule pin run |
+| v8.6.0-dev | `2026_03_15_000000` | ⚠️ untested | `search_endpoints.basic_auth_credential` becomes encrypted and widens to 4000 chars — see [Soft drift](#soft-drift) |
 
-The matrix above describes the **current** release (v0.8.0). Earlier releases of
-this API targeted different Quepid versions — see below.
+The matrix describes the **current** release. Earlier releases targeted
+different Quepid versions — see below.
 
 ---
 
 ## Our tags vs their tags
 
-`models.py` has been regenerated exactly once in this project's life, so every
-release of this API falls into one of four eras:
+`models.py` has been regenerated twice in this project's life, so every release
+falls into one of five eras:
 
 | Our tags | Released | `models.py` reflects | Compose pins | Runs against |
 | --- | --- | --- | --- | --- |
 | v0.0.1 – v0.2.11 | 2025-01-18 → 2025-01-25 | Quepid **v7.15.1 / v7.16.0** (`2024_03_08_204637`) | nothing — no Quepid service | v7.15.1 – v7.18.1 |
 | v0.3.0 – v0.3.5 | 2025-03-12 → 2025-03-24 | **v8.1.0** — regenerated in `3068d19` | nothing — no Quepid service | v8.0.0 – v8.1.0 |
 | v0.3.6 – v0.6.0 | 2025-05-10 → 2025-07-18 | v8.1.0 | **8.1.0** | v8.0.0 – v8.1.0 |
-| **v0.6.1 – v0.8.0** (current) | 2026-01-07 → 2026-08-01 | v8.1.0 + the `openai_key` hand-patch | **8.3.6** | **v8.0.0 – v8.3.7** |
+| v0.6.1 – v0.8.2 | 2026-01-07 → 2026-08-02 | v8.1.0 + the `openai_key` hand-patch | **8.3.6** | v8.0.0 – v8.3.7 |
+| **v0.9.0** (current) | 2026-08-02 | **v8.5.0** — regenerated | **8.5.0** | **v8.4.0 – v8.5.0** |
 
 Reading the eras:
 
@@ -147,12 +109,8 @@ Reading the eras:
   `openai_key` and `cases.nightly` absent, `permissions` table still there.
   That is v7.15.1 / v7.16.0 (March 2024). `docker-compose.yml` at v0.3.5 defines
   only `quepid-api-app` and `quepid-api-web`: you brought your own Quepid.
-- **`3068d19` "Upgrade to 8.1.0" (2025-03-12)** is the single regeneration —
-  +322 lines, new tables (`ahoy_events`, …), two days after v8.1.0 shipped
-  (2025-03-10). Every release since inherits it. Its sibling commit `6d79016`
-  ("dont mess with introspected models") deleted a hand-added `check_token`
-  classmethod from `Users` and is the origin of the "pure `inspectdb` output"
-  rule in `CLAUDE.md`.
+- **`3068d19` "Upgrade to 8.1.0" (2025-03-12)** was the first regeneration —
+  +322 lines, new tables (`ahoy_events`, …), two days after v8.1.0 shipped.
 - **Why v0.6.0 and earlier stop at Quepid v8.1.0.** Those releases declare
   `Users.openai_key`, and `common/auth.py:user_from_token` selects the whole
   `Users` row on **every authenticated request**. Quepid renamed that column to
@@ -160,48 +118,57 @@ Reading the eras:
   some corner of the API, but on all of it.
 - **What v0.6.1 bought.** Commenting that one column out extended the range from
   v8.1.0 to v8.3.7 and cost nothing on older versions — a column left out of a
-  `SELECT` is harmless — so the current release spans v8.0.0 – v8.3.7. One
-  commented line is the whole difference between supporting two Quepid releases
-  and supporting seven.
+  `SELECT` is harmless. One commented line was the whole difference between
+  supporting two Quepid releases and supporting seven.
+- **Why v0.9.0 does not span both sides.** The v8.4.0 books migrations both
+  *dropped* and *added* columns, so no single set of `inspectdb` output satisfies
+  v8.3.x and v8.4.0+ at once. The `openai_key` trick worked because a missing
+  column can simply be left out of the model; a column that must be *present*
+  on one side and *absent* on the other has no such escape. Pick a side.
 
 Two footnotes on the tag list: v0.2.12 is dated 2025-03-24 but does **not**
-contain `3068d19`, so despite its date it belongs to the 7.x era, not the 8.1.0
-one. And the 7.x-era models carry a `Permissions` model for a table Quepid
-dropped in v8.0.0 — harmless, because no code of that era ever queried it.
+contain `3068d19`, so despite its date it belongs to the 7.x era. And the 7.x-era
+models carry a `Permissions` model for a table Quepid dropped in v8.0.0 —
+harmless, because no code of that era ever queried it.
 
 ---
 
-## The v8.4.0 break
+## What the v8.4.0 / v8.5.0 upgrade changed here
 
-Two migrations landed in December 2025 and both hit `Books`:
+Beyond the books columns, regenerating against v8.5.0 moved four things that
+needed code changes rather than just a new model file:
 
-- `20251206163533_remove_selection_strategy_from_books` — drops
-  `books.selection_strategy_id` and the whole `selection_strategies` table.
-- `20251206221416_add_scale_to_books` — moves `scale` / `scale_with_labels` onto
-  `books` and **drops `books.scorer_id`**.
+- **`queries.options` and `query_doc_pairs.options` are now `JSONField`.** They
+  became MySQL `json` back in v8.2.0, but the old `models.py` still typed them
+  as `TextField`, so `api/queries.py` wrote `json.dumps(...)` by hand. Against a
+  real `JSONField` that **double-encodes**: Django serializes the string, and
+  the column ends up holding a JSON *string* where Quepid expects an object.
+  Both write sites now pass the dict straight through.
+  `tests/test_queries.py:58` explains why the HTTP suite cannot catch this —
+  `resolve_query_options` falls back to `json.loads` and silently recovers, so
+  the REST response is byte-identical either way. Verify by reading the column:
 
-`models.py:255-256` still declares both:
+  ```sql
+  SELECT JSON_TYPE(options) FROM queries WHERE id = <id>;   -- want OBJECT, not STRING
+  ```
 
-```python
-scorer_id = models.IntegerField(blank=True, null=True)
-selection_strategy = models.ForeignKey('SelectionStrategies', models.DO_NOTHING)
-```
+- **`books.archived` is `NOT NULL`** (added v8.3.0) and `inspectdb` gives it no
+  Django default, so `Books.objects.create(...)` sent `NULL` and MySQL rejected
+  it with `Column 'archived' cannot be null`. `api/books.py:create_book` now
+  passes `archived=0` explicitly — the same pattern `created_at` / `updated_at`
+  already required, and the reason every books test failed on first run.
 
-Django puts every declared column in the `SELECT` list, so on a v8.4.0+ database
-this fails with `Unknown column 'books.selection_strategy_id' in 'field list'`
-before any row is returned. What stops working:
+- **The `teams_*` junction tables now use `CompositePrimaryKey`.** Modern
+  `inspectdb` emits `pk = models.CompositePrimaryKey('case_id', 'team_id')`
+  instead of the old "composite primary key found, that is not supported"
+  `OneToOneField` workaround. This needs Django ≥ 5.2; the app image runs 6.0.
+  Nothing writes to these tables — MCP only reads them for scoping — so the
+  change is read-only in effect.
 
-| Surface | Effect |
-| --- | --- |
-| `GET /api/books`, `GET /api/books/{id}` | 500 / error on every call |
-| `POST /api/books` (`api/books.py:48`) | fails — and `CreateBook` *requires* `scorer_id` and `selection_strategy_id`, both of which no longer exist |
-| `PATCH /api/books/{id}` | same two fields in `update_fields` |
-| MCP `books` toolset (`quepid_mcp/mcp.py:200`) | errors on every query |
-| MCP `selection_strategies` toolset (`quepid_mcp/mcp.py:353`) | queries a dropped table |
-| Anything traversing `QueryDocPairs.book` with `select_related` | pulls the broken `books` columns in |
-
-`Ratings`, `Judgements`, `Queries`, `Cases`, `Teams`, `Scorers`, `Tries`,
-`Snapshots` are unaffected by this particular break.
+- **`cases.options`, `search_endpoints.options` and `users.options` became
+  `JSONField` too.** `api/cases.py:141` assigns a dict to `case.options`, which
+  was silently storing a Python `repr` into a `TextField` before and is now
+  correct.
 
 ---
 
@@ -209,26 +176,18 @@ before any row is returned. What stops working:
 
 Changes that do **not** raise today but change behaviour or hide data:
 
-- **`options` columns became MySQL `json` (v8.2.0).** `queries.options` and
-  `query_doc_pairs.options` are `TextField` in `models.py`. Reads still return
-  the serialized JSON text, so `schemas.py:41 resolve_query_options` keeps
-  working, and `api/queries.py:61` writes `json.dumps(...)`, which MySQL accepts.
-  The trap is that any *non-JSON* string written to those fields now raises at
-  the database instead of being stored.
-- **`search_endpoints.basic_auth_credential` is Rails-encrypted (v8.6.0-dev,
-  `20260306000002`) and widened to 4000 chars.** `models.py` types it as
-  `CharField(max_length=255)`. On such a database this API would return
-  ActiveRecord Encryption ciphertext, not the credential — and the MCP
-  `searchendpoints` toolset returns the column whether or not it is in `fields`
-  (see `docs/mcp-server-plan.md` §3.2).
-- **Columns this API cannot see**, because `inspectdb` never captured them:
-  `users.options`, `users.llm_key`, `books.archived`, `books.scale`,
-  `books.scale_with_labels`, `books.scoring_guidelines`,
-  `search_endpoints.requests_per_minute`, `search_endpoints.test_query`,
-  `cases.auto_populate_book_pairs`, `cases.auto_populate_case_judgements`, and
-  the entire `mapper_wizard_states` table. All are nullable or have defaults, so
-  inserts from this API still succeed — the rows just come out with Rails'
-  defaults, which for `cases.auto_populate_case_judgements` means `true`.
+- **`search_endpoints.basic_auth_credential` is Rails-encrypted as of
+  v8.6.0-dev** (`20260306000002`) and widened to 4000 chars. At v8.5.0 it is
+  still a plain `varchar(255)`, which is what `models.py` reflects. On a
+  v8.6.0 database this API would return ActiveRecord Encryption ciphertext
+  rather than the credential — and the MCP `searchendpoints` toolset returns the
+  column whether or not it is in `fields` (see `docs/mcp-server-plan.md` §3.2).
+- **Columns this API cannot see** because they postdate the baseline: anything
+  added after `2026_01_14_150154`. At the time of writing that is the
+  v8.6.0-dev set only.
+- **`cases.auto_populate_book_pairs` / `auto_populate_case_judgements`** are now
+  captured by `inspectdb`, but nothing in this API sets them, so inserts still
+  take Rails' defaults — which for `auto_populate_case_judgements` means `true`.
 
 ---
 
@@ -236,36 +195,70 @@ Changes that do **not** raise today but change behaviour or hide data:
 
 The regeneration itself is mechanical; the code changes around it are not.
 
-1. Bring up a Quepid of the target version and migrate it, then regenerate —
-   `models.py` **must stay pure `inspectdb` output** (`CLAUDE.md`):
+1. Bring the stack up on the target version and migrate it:
 
    ```bash
-   docker compose run quepid-api-quepid bin/rake db:migrate
-   docker compose run quepid-api-app \
-       python manage.py inspectdb --database quepid > quepid/models.py
+   # docker-compose.yml: o19s/quepid:<target>
+   docker compose up -d quepid-api-quepid
+   docker compose exec -T quepid-api-quepid bin/rake db:migrate
    ```
 
-   Regeneration reintroduces the users key column as `llm_key`, undoing the
-   hand-comment at `models.py:769`. On v8.2.0+ that is *correct* — the column
-   exists again under the new name — but it is also encrypted at rest as of
-   `20250709144954`, so decide deliberately whether to keep it out of the model
-   rather than surface ciphertext.
+   Confirm the database actually moved — this is the check that catches "I edited
+   the tag but the container never restarted":
 
-2. For v8.4.0+, update the book-shaped code by hand:
-   - `api/books.py` — drop `scorer_id` and `selection_strategy_id` from
-     `CreateBook`, `UpdateBook`, `create_book` and `update_book`; decide whether
-     to expose `scale` / `scale_with_labels` / `scoring_guidelines` instead.
-     This is a **breaking change to this API's own contract**, so it wants a
-     minor version bump in `package.json`.
-   - `quepid_mcp/mcp.py` — delete `SelectionStrategiesToolset` and refresh
-     `BooksToolset.fields`.
+   ```sql
+   SELECT MAX(version) FROM schema_migrations;   -- must equal the target's schema.rb
+   ```
 
-3. Bump `docker-compose.yml:77` (`o19s/quepid:8.3.6`) to the same version, so
-   the dev stack and the models agree.
+2. Regenerate, then **re-apply the three hand-patches above**:
 
-4. Optionally move the submodule pin to the matching release tag
-   (`git -C quepid checkout v8.x.y`, then commit the gitlink), so the vendored
-   schema documents the version this code targets rather than upstream `main`.
+   ```bash
+   docker compose exec -T quepid-api-app \
+       python manage.py inspectdb --database quepid > quepid_api/quepid/models.py
+   ```
+
+3. Diff the table sets and the field list; anything *removed* is a break,
+   anything whose *type* changed is potential soft drift:
+
+   ```bash
+   git diff -U0 quepid_api/quepid/models.py | grep -E '^[-+]    [a-z_]+ = '
+   ```
+
+   Pay particular attention to `TextField` → `JSONField` flips: they do not
+   raise, they corrupt.
+
+4. Fix every `NOT NULL` column that `inspectdb` gives no default. Django omits
+   nothing from an INSERT, so each one needs an explicit value at the `.create()`
+   site (`created_at`, `updated_at`, `books.archived` today).
+
+5. Rebuild the app image — the code is baked in, not mounted, so edits are
+   invisible until you do:
+
+   ```bash
+   docker compose build quepid-api-app && docker compose up -d quepid-api-app
+   ```
+
+6. Move the submodule pin to the matching release tag so the vendored schema
+   documents the version this code targets:
+
+   ```bash
+   git -C quepid checkout v8.x.y   # then commit the gitlink
+   ```
+
+7. Run the suite against the new stack, declaring the version:
+
+   ```bash
+   export QUEPID_API_TOKEN=$(docker compose exec -T quepid-api-quepid \
+       bundle exec thor user:add_api_key admin@example.com | grep -o '[0-9a-f]\{64\}')
+   export QUEPID_TARGET=8.x.y
+   pytest
+   ```
+
+   `QUEPID_TARGET` is not cosmetic: `tests/test_books.py:52` asserts in both
+   directions, so it fails if the database disagrees with what you declared.
+
+8. If the API's own request contract changed, bump `package.json` — it is the
+   source of truth for the released version.
 
 ---
 
@@ -286,7 +279,7 @@ for t in $(git tag -l 'v8*' | sort -V); do
 done
 
 # migrations applied after the baseline
-ls db/migrate | awk '$0 > "20250225162317"'
+ls db/migrate | awk '$0 > "20260114150154"'
 ```
 
 Our tags against theirs, one line per release:
@@ -298,16 +291,13 @@ for t in $(git tag -l | sort -V); do
 done
 ```
 
-And, from the repo root, the two history checks that dated the baseline
+And, from the repo root, the history check that dates the baseline
 independently of the schema:
 
 ```bash
 # which Quepid the dev stack has pointed at, over time
 git log -p --format='COMMIT %h %ad' --date=short -- docker-compose.yml \
   | grep -E '^COMMIT |^\+.*o19s/quepid'
-
-# when the notebooks last ran against a live stack
-grep -ho "'created_at': '20[0-9-]*T[0-9:]*" *.ipynb | sort -u | tail
 ```
 
 Anything in that last list touching a column present in `models.py` is drift;

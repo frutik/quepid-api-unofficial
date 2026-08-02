@@ -252,8 +252,6 @@ class BookMetadata(models.Model):
 
 class Books(models.Model):
     id = models.BigAutoField(primary_key=True)
-    scorer_id = models.IntegerField(blank=True, null=True)
-    selection_strategy = models.ForeignKey('SelectionStrategies', models.DO_NOTHING)
     name = models.CharField(max_length=255, blank=True, null=True)
     created_at = models.DateTimeField()
     updated_at = models.DateTimeField()
@@ -263,6 +261,10 @@ class Books(models.Model):
     export_job = models.CharField(max_length=255, blank=True, null=True)
     import_job = models.CharField(max_length=255, blank=True, null=True)
     populate_job = models.CharField(max_length=255, blank=True, null=True)
+    archived = models.IntegerField()
+    scale = models.CharField(max_length=255, blank=True, null=True)
+    scale_with_labels = models.TextField(blank=True, null=True)
+    scoring_guidelines = models.TextField(blank=True, null=True)
 
     class Meta:
         managed = False
@@ -356,6 +358,25 @@ class Judgements(models.Model):
         unique_together = (('user_id', 'query_doc_pair'),)
 
 
+class MapperWizardStates(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    user = models.ForeignKey('Users', models.DO_NOTHING)
+    search_url = models.CharField(max_length=2000, blank=True, null=True)
+    http_method = models.CharField(max_length=10, blank=True, null=True)
+    html_content = models.TextField(blank=True, null=True)
+    number_of_results_mapper = models.TextField(blank=True, null=True)
+    docs_mapper = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField()
+    updated_at = models.DateTimeField()
+    custom_headers = models.TextField(blank=True, null=True)
+    basic_auth_credential = models.CharField(max_length=255, blank=True, null=True)
+    test_query = models.TextField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'mapper_wizard_states'
+
+
 class Queries(models.Model):
     arranged_next = models.BigIntegerField(blank=True, null=True)
     arranged_at = models.BigIntegerField(blank=True, null=True)
@@ -364,8 +385,8 @@ class Queries(models.Model):
     case = models.ForeignKey(Cases, models.DO_NOTHING, blank=True, null=True)
     created_at = models.DateTimeField()
     updated_at = models.DateTimeField()
-    options = models.TextField(db_collation='utf8mb3_bin', blank=True, null=True)
     information_need = models.CharField(max_length=255, blank=True, null=True)
+    options = models.JSONField(blank=True, null=True)
 
     class Meta:
         managed = False
@@ -374,7 +395,7 @@ class Queries(models.Model):
 
 class QueryDocPairs(models.Model):
     id = models.BigAutoField(primary_key=True)
-    query_text = models.CharField(max_length=2048, blank=True, null=True)
+    query_text = models.CharField(max_length=2048, db_collation='utf8mb4_bin', blank=True, null=True)
     position = models.IntegerField(blank=True, null=True)
     document_fields = models.TextField(db_collation='utf8mb4_0900_ai_ci', blank=True, null=True)
     book = models.ForeignKey(Books, models.DO_NOTHING)
@@ -383,7 +404,7 @@ class QueryDocPairs(models.Model):
     doc_id = models.CharField(max_length=500, blank=True, null=True)
     information_need = models.CharField(max_length=255, blank=True, null=True)
     notes = models.TextField(blank=True, null=True)
-    options = models.TextField(db_collation='utf8mb3_bin', blank=True, null=True)
+    options = models.JSONField(blank=True, null=True)
 
     class Meta:
         managed = False
@@ -442,22 +463,12 @@ class SearchEndpoints(models.Model):
     mapper_code = models.TextField(blank=True, null=True)
     proxy_requests = models.IntegerField(blank=True, null=True)
     options = models.JSONField(blank=True, null=True)
+    requests_per_minute = models.IntegerField(blank=True, null=True)
+    test_query = models.TextField(blank=True, null=True)
 
     class Meta:
         managed = False
         db_table = 'search_endpoints'
-
-
-class SelectionStrategies(models.Model):
-    id = models.BigAutoField(primary_key=True)
-    name = models.CharField(max_length=255, blank=True, null=True)
-    created_at = models.DateTimeField()
-    updated_at = models.DateTimeField()
-    description = models.CharField(max_length=255, blank=True, null=True)
-
-    class Meta:
-        managed = False
-        db_table = 'selection_strategies'
 
 
 class SnapshotDocs(models.Model):
@@ -682,33 +693,33 @@ class TeamsBooks(models.Model):
 
 
 class TeamsCases(models.Model):
-    case = models.OneToOneField(Cases, models.DO_NOTHING, primary_key=True)  # The composite primary key (case_id, team_id) found, that is not supported. The first column is selected.
+    pk = models.CompositePrimaryKey('case_id', 'team_id')
+    case = models.ForeignKey(Cases, models.DO_NOTHING)
     team = models.ForeignKey(Teams, models.DO_NOTHING)
 
     class Meta:
         managed = False
         db_table = 'teams_cases'
-        unique_together = (('case', 'team'),)
 
 
 class TeamsMembers(models.Model):
-    member = models.OneToOneField('Users', models.DO_NOTHING, primary_key=True)  # The composite primary key (member_id, team_id) found, that is not supported. The first column is selected.
+    pk = models.CompositePrimaryKey('member_id', 'team_id')
+    member = models.ForeignKey('Users', models.DO_NOTHING)
     team = models.ForeignKey(Teams, models.DO_NOTHING)
 
     class Meta:
         managed = False
         db_table = 'teams_members'
-        unique_together = (('member', 'team'),)
 
 
 class TeamsScorers(models.Model):
-    scorer = models.OneToOneField(Scorers, models.DO_NOTHING, primary_key=True)  # The composite primary key (scorer_id, team_id) found, that is not supported. The first column is selected.
+    pk = models.CompositePrimaryKey('scorer_id', 'team_id')
+    scorer = models.ForeignKey(Scorers, models.DO_NOTHING)
     team = models.ForeignKey(Teams, models.DO_NOTHING)
 
     class Meta:
         managed = False
         db_table = 'teams_scorers'
-        unique_together = (('scorer', 'team'),)
 
 
 class TeamsSearchEndpoints(models.Model):
@@ -766,7 +777,8 @@ class Users(models.Model):
     stored_raw_invitation_token = models.CharField(max_length=255, blank=True, null=True)
     profile_pic = models.CharField(max_length=4000, blank=True, null=True)
     system_prompt = models.CharField(max_length=4000, blank=True, null=True)
-    # openai_key = models.CharField(max_length=255, blank=True, null=True)
+    llm_key = models.CharField(max_length=4000, blank=True, null=True)
+    options = models.JSONField(blank=True, null=True)
 
     class Meta:
         managed = False

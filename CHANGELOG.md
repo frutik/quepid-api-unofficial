@@ -30,8 +30,11 @@ which is what triggers the Docker build in
 
 ## [Unreleased]
 
-Bumping this to **0.9.0** rather than a patch: `DELETE /api/case/{id}/` and
-`GET /api/case/` both change behaviour in ways a caller can observe.
+Bumping this to **0.9.0** rather than a patch: this release **re-targets Quepid
+from v8.0.0 – v8.3.7 to v8.4.0 – v8.5.0**, which is a breaking change to both the
+databases it runs against and this API's own books contract. `DELETE
+/api/case/{id}/` and `GET /api/case/` also change behaviour in ways a caller can
+observe.
 
 ### Added
 
@@ -58,6 +61,20 @@ Bumping this to **0.9.0** rather than a patch: `DELETE /api/case/{id}/` and
 
 ### Changed
 
+- **Quepid support moves to v8.4.0 – v8.5.0; v8.3.7 and older are no longer
+  supported.** `quepid/models.py` has been regenerated from a v8.5.0 database
+  (`schema.rb` `2026_01_14_150154`), the dev stack and the `quepid/` submodule
+  now both pin **8.5.0**, and for the first time all three agree. The range does
+  not span the v8.4.0 cutover in either direction: those migrations both dropped
+  and added `books` columns, so no single `inspectdb` output satisfies v8.3.x and
+  v8.4.0+ at once. See
+  [`docs/quepid-compatibility.md`](docs/quepid-compatibility.md).
+- **`POST /api/books` and `PATCH /api/books/{id}` no longer accept `scorer_id` or
+  `selection_strategy_id`.** Quepid v8.4.0 dropped both columns and the
+  `selection_strategies` table. `scorer_id` and `selection_strategy_id` were
+  *required* by `CreateBook`, so every existing caller must drop them. Books are
+  now graded through `scale` / `scale_with_labels`, which this API does not yet
+  expose.
 - **`DELETE /api/case/{id}/` now archives instead of deleting.** Still `204`, and
   reversible with `PUT {"archived": 0}`. A hard delete was never actually
   possible: `create_case` always writes a try, `tries.case_id` carries a real FK
@@ -71,8 +88,28 @@ Bumping this to **0.9.0** rather than a patch: `DELETE /api/case/{id}/` and
   with no default in Rails — a case Quepid wrote itself can be `NULL`, and
   `NULL` still means "not archived".
 
+### Removed
+
+- **The MCP `selectionstrategies` collection**, leaving 13. The table no longer
+  exists in Quepid v8.4.0+. `books.selection_strategy` is gone from the `books`
+  collection's advertised fields and from the server instructions, which now
+  describe `scale` / `scale_with_labels` instead.
+
 ### Fixed
 
+- **`query_options` was double-encoded on write.** `queries.options` became a
+  MySQL `json` column in Quepid v8.2.0 and now reflects as a `JSONField`, so
+  `api/queries.py` calling `json.dumps(...)` made Django serialize an
+  already-serialized string — the column ended up holding a JSON *string* where
+  Quepid expects an object. Both write sites now pass the dict through. This was
+  invisible over REST (`resolve_query_options` falls back to `json.loads` and
+  recovers), but broke Quepid's own reads and the MCP `queries` collection, which
+  has no resolver in front of it. Verify with
+  `SELECT JSON_TYPE(options) FROM queries` — it should say `OBJECT`.
+- **`POST /api/books` failed with `Column 'archived' cannot be null`.**
+  `books.archived` is `NOT NULL` with a Rails-side default, and `inspectdb` gives
+  it no Django default, so Django sent `NULL`. `create_book` now passes
+  `archived=0`, the same way it already had to for `created_at` / `updated_at`.
 - **`POST /api/books` always failed.** `create_book` passed `owner_id=request.auth`
   — a `Users` instance — into a plain `IntegerField`, which `int()` cannot adapt,
   so it raised and the router's broad `except Exception` turned it into a `400`.
@@ -85,9 +122,15 @@ Bumping this to **0.9.0** rather than a patch: `DELETE /api/case/{id}/` and
 - `archived = NULL` is unreachable over HTTP (`update_case` treats `None` as
   "leave alone"), so that third state is verified by reading the queryset, not by
   a test.
-- The v8.2.0 `queries.options` json drift cannot be detected from REST:
-  `resolve_query_options` falls back to `json.loads`, silently recovering from
-  double-encoded values. Verifying it needs the stored column or the MCP surface.
+- The `query_options` double-encoding fixed above is **still not covered by a
+  test**, and cannot be from REST: `resolve_query_options` falls back to
+  `json.loads` and recovers, so a regression would look identical over HTTP.
+  Catching it needs the stored column (`SELECT JSON_TYPE(options)`) or the MCP
+  surface, neither of which the suite touches.
+- Books' `scale`, `scale_with_labels` and `scoring_guidelines` — which replaced
+  the dropped scorer and selection-strategy references in v8.4.0 — are readable
+  through `GET /api/books` but cannot be set: `CreateBook` and `UpdateBook` do
+  not expose them.
 - `DELETE` being a soft delete means the test suite leaves archived cases behind
   each run; fixtures cannot do better through the API alone.
 

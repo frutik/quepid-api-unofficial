@@ -3,7 +3,7 @@
 An unofficial API for [Quepid](https://github.com/o19s/quepid), in two surfaces:
 
 - an **HTTP API** described by **OpenAPI 3.1**, browsable at `/api/docs`
-- a read-only **MCP server** at `/mcp/mcp`, publishing 14 collections to LLM
+- a read-only **MCP server** at `/mcp/mcp`, publishing 13 collections to LLM
   clients
 
 Both accept the same bearer tokens as the official Quepid API. The app is
@@ -12,9 +12,10 @@ that the Rails Quepid app owns and migrates.
 
 ## Quepid compatibility
 
-This release is built against Quepid **8.1.0** and runs against Quepid
-**8.0.0 – 8.3.7**. It does **not** work on Quepid 8.4.0 or newer, which dropped
-the `books` columns this API still expects.
+This release is built against Quepid **8.5.0** and runs against Quepid
+**8.4.0 – 8.5.0**. It does **not** work on Quepid 8.3.7 or older: v8.4.0
+reshaped the `books` table, and the models this API reflects now expect the new
+shape.
 
 Full version matrix, the evidence behind it and what to change when
 re-targeting: [`docs/quepid-compatibility.md`](docs/quepid-compatibility.md).
@@ -92,7 +93,7 @@ v8.4.0 schema change.
 
 ```
 export QUEPID_API_TOKEN=<your api token>
-export QUEPID_TARGET=8.3.6
+export QUEPID_TARGET=8.5.0
 npm test
 ```
 
@@ -153,9 +154,9 @@ requests.
 
 Alongside the REST API this project serves a read-only
 [MCP](https://modelcontextprotocol.io) endpoint, so an AI assistant can query
-your Quepid data directly. It exposes 14 collections — `cases`, `queries`,
+your Quepid data directly. It exposes 13 collections — `cases`, `queries`,
 `ratings`, `books`, `querydocpairs`, `judgements`, `tries`, `snapshots`,
-`snapshotqueries`, `searchendpoints`, `scorers`, `selectionstrategies`, `teams`
+`snapshotqueries`, `searchendpoints`, `scorers`, `teams`
 and `teamscases` — queried with a MongoDB-style aggregation pipeline
 (`$match`, `$lookup`, `$sort`, `$project`, `$group`, `$limit`).
 

@@ -7,6 +7,15 @@ Goal: a read-only MCP server at `/mcp/mcp`, authenticated with **the same
 Quepid API token the django-ninja API already accepts**, exposing the Quepid
 MySQL schema as queryable collections.
 
+> **This is a design record, written against Quepid v8.1.0 models. It is not
+> maintained as a description of the current server.** The v8.5.0 upgrade
+> (2026-08-02) dropped the `selectionstrategies` collection, leaving **13**, and
+> removed `scorer_id` / `selection_strategy` from `books` — so the whitelist in
+> §3.3, the phase-2 list in §3.4 and the real-FK list in §3.5 are all one
+> version behind. `quepid_api/quepid_mcp/mcp.py` is the source of truth for what
+> is published; `docs/quepid-compatibility.md` explains what moved and why.
+> The findings in §0 and §3.2 are version-independent and still hold.
+
 ---
 
 ## 0. Blockers found during the audit — fix these first

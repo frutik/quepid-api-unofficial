@@ -200,7 +200,8 @@ class RatingsToolset(QuepidScoped, ModelQueryToolset):
 class BooksToolset(QuepidScoped, ModelQueryToolset):
     model = qmodels.Books
     fields = [
-        'id', 'name', 'scorer_id', 'owner_id', 'selection_strategy',
+        'id', 'name', 'owner_id', 'archived',
+        'scale', 'scale_with_labels', 'scoring_guidelines',
         'support_implicit_judgements', 'show_rank',
         'created_at', 'updated_at',
     ]
@@ -209,14 +210,14 @@ class BooksToolset(QuepidScoped, ModelQueryToolset):
         'shared across cases. Its query/document pairs are in the '
         '"querydocpairs" collection ($match {"book": <id>}) and the verdicts '
         'on those pairs are in "judgements".\n\n'
-        'WARNING: "scorer_id" ' + RAW_ID_WARNING.format(collection='scorers') + '\n\n'
-        '"selection_strategy" is a real reference to the '
-        '"selectionstrategies" collection. '
-        + LOOKUP_FIELD_NOTE.format(field='selection_strategy') + '\n\n'
+        '"scale" and "scale_with_labels" define the rating scale the book is '
+        'judged on; they replaced the scorer and selection-strategy references '
+        'books carried before Quepid v8.4.0.\n\n'
         '"owner_id" identifies the owning user and cannot be resolved to a '
         'name -- there is no users collection in this server.\n\n'
-        '"support_implicit_judgements" and "show_rank" are MySQL tinyints: '
-        '1, 0 or null, where null is not the same as 0. Latest = highest id.'
+        '"support_implicit_judgements", "show_rank" and "archived" are MySQL '
+        'tinyints: 1, 0 or null, where null is not the same as 0. '
+        'Latest = highest id.'
     )
 
     def scope(self, queryset, user):
@@ -301,12 +302,12 @@ class ScorersToolset(QuepidScoped, ModelQueryToolset):
         'show_scale_labels', 'created_at', 'updated_at',
     ]
     extra_instructions = (
-        'A scorer is the metric a case or book is graded with (nDCG@10, AP@10, '
+        'A scorer is the metric a case is graded with (nDCG@10, AP@10, '
         'a custom expression, ...). "communal" is a tinyint marking Quepid\'s '
         'built-in scorers, which everyone can see; your own and your teams\' '
         'scorers appear alongside them.\n\n'
-        'This collection is what "cases.scorer_id" and "books.scorer_id" point '
-        'at, but those are raw integers, not references -- resolve them with '
+        'This collection is what "cases.scorer_id" points '
+        'at, but that is a raw integer, not a reference -- resolve it with '
         '$match {"id": <value>}. "scale" describes the allowed rating values. '
         'The scorer source code is not useful to query and is large.'
     )
@@ -348,21 +349,6 @@ class SearchEndpointsToolset(QuepidScoped, ModelQueryToolset):
             .values('search_endpoint_id')
 
         return queryset.filter(Q(owner_id=user.id) | Q(id__in=shared))
-
-
-class SelectionStrategiesToolset(QuepidScoped, ModelQueryToolset):
-    model = qmodels.SelectionStrategies
-    fields = ['id', 'name', 'description', 'created_at', 'updated_at']
-    extra_instructions = (
-        'Static reference data: the strategies Quepid offers for choosing '
-        'which query/document pairs to put in front of a judge. The $lookup '
-        'target for "books.selection_strategy". Not user-specific -- every '
-        'caller sees the same handful of rows.'
-    )
-
-    def scope(self, queryset, user):
-        # Reference data, identical for everyone. Intentionally not narrowed.
-        return queryset
 
 
 class TriesToolset(QuepidScoped, ModelQueryToolset):

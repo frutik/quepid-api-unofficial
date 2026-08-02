@@ -21,8 +21,7 @@ SERVER_INSTRUCTIONS = (
     '(verdicts on those pairs), "tries" (tuning iterations of a case), '
     '"snapshots" and "snapshotqueries" (frozen results and their scores), '
     '"searchendpoints" (the search engines cases query), "scorers" (the '
-    'metrics used to grade), "selectionstrategies" (reference data), '
-    '"teams" and "teamscases" (sharing).\n\n'
+    'metrics used to grade), "teams" and "teamscases" (sharing).\n\n'
 
     'There is no users collection: user accounts are not exposed. Columns '
     'named owner_id or user_id identify a person but cannot be resolved to '
@@ -39,8 +38,7 @@ SERVER_INSTRUCTIONS = (
     'judgements.query_doc_pair -> querydocpairs, tries.case -> cases, '
     'tries.search_endpoint -> searchendpoints, snapshots.case -> cases, '
     'snapshotqueries.snapshot -> snapshots, snapshotqueries.query -> '
-    'queries, books.selection_strategy -> selectionstrategies, '
-    'teamscases.case -> cases, teamscases.team -> teams. '
+    'queries, teamscases.case -> cases, teamscases.team -> teams. '
     'Resolve these in one query with $lookup rather than returning raw ids '
     'the user cannot read. localField must be the field name ("case", '
     '"query", "book", "owner"); results display the "_id" form '
@@ -48,7 +46,7 @@ SERVER_INSTRUCTIONS = (
 
     'These columns look like references and are NOT -- $lookup cannot '
     'traverse them: cases.scorer_id, cases.book_id, books.owner_id, '
-    'books.scorer_id, ratings.user_id, judgements.user_id, '
+    'ratings.user_id, judgements.user_id, '
     'snapshots.try_id, snapshots.scorer_id, scorers.owner_id. Query the '
     'target collection separately with $match {"id": <value>}.\n\n'
 
