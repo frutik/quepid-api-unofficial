@@ -38,6 +38,72 @@ observe.
 
 ### Added
 
+- **Three management commands that build Quepid cases from public relevance
+  datasets**, each doing one thing:
+  - **`create_case <dataset> <case name>`** — an empty case and its try,
+    configured for the dataset: query DSL, field spec, and optionally the search
+    endpoint to run it against (`--endpoint-url`, or `--search-endpoint-id` for
+    one you already have). `--template` picks the search configuration,
+    `--search-query-file` swaps in a one-off DSL, `--scorer` / `--scorer-id` the
+    scorer — which is *resolved*, never left to `CreateCase`'s default of 5.
+  - **`load_dataset <dataset> <case id>`** — the queries and judgements, into a
+    case that already exists. It creates nothing, so a dataset can go into a case
+    built in Quepid's UI and a re-run cannot silently produce a second case;
+    loading into a case that already has queries is refused unless `--append`.
+    It takes no path either: the dataset's files are **downloaded from GitHub**
+    on first use and cached under `TMP_DIR/quepid-datasets/<name>/`. `--limit`,
+    `--skip-ratings`, `--workers` and `--dry-run` control the load.
+  - **`list_cases`** — id, name, scorer, tries and query count, newest first,
+    with `--archived` (where soft-deleted cases go), `--search`, `--limit` and
+    `--no-counts`.
+
+  All three are **clients of this API over HTTP**, not writers against the
+  database: they POST the same endpoints wands.ipynb does, so they need a URL and
+  a token (`--api-url`, `--api-token` / `QUEPID_API_TOKEN`) rather than
+  `QUEPID_DB_*`, work against any deployment, and put a few hundred thousand
+  calls through the real request path per load — coverage at a volume `tests/`
+  will never reach. A load is **not atomic**: the API has no bulk endpoint, so a
+  failure part-way leaves the case half-filled and says so.
+- Two datasets, neither of which you download yourself: **wands**
+  ([Wayfair WANDS](https://github.com/wayfair/WANDS/tree/main/dataset) — 480
+  queries, 231873 judgements after de-duplication), which is what the notebooks
+  at the repo root use; and **esci**
+  ([Amazon ESCI](https://github.com/amazon-science/esci-data/tree/main/shopping_queries_dataset)
+  — the US small-version test split, 8956 queries and 181701 judgements, with
+  E/S/C/I mapped to 3/2/1/0). Only the judgement files are fetched; both corpora
+  belong in a search engine, not in Quepid.
+- **`quepid_datasets/fetch.py`**, which does that fetching. Files land in
+  `TMP_DIR/quepid-datasets/<dataset>/` via a `.part` rename, so an interrupted
+  download is never cached; delete the directory to re-download. It refuses a
+  **Git LFS pointer** — `raw.githubusercontent.com` serves one instead of the
+  file for an LFS repository like esci-data, where 51 MB of parquet arrives as
+  133 bytes of text, so that dataset's URL is the `github.com/<repo>/raw/<ref>/`
+  form. The size check is skipped for content-encoded responses, since GitHub
+  gzips the WANDS CSVs and requests hands back decoded bytes.
+- **`--query-options-file` and `--doc-id-map`**, the two things the
+  [image-search-in-Qdrant articles](https://frutik.medium.com/how-to-evaluate-image-search-in-qdrant-using-quepid-and-the-hacks-it-takes-part-2-hacks-39ed553cd97a)
+  need and no dataset can supply. The first attaches per-query options — a CLIP
+  vector, say — which a DSL reads back as `#$qOption.clip##`; the second
+  translates dataset document ids into whatever the engine returns, since Qdrant
+  point ids are assigned at index time and are not ASINs. Unmapped judgements
+  are dropped and counted rather than posted to score nothing.
+- ESCI's **`qdrant-image` template** reproduces that setup: `searchapi` engine,
+  the articles' `docsMapper`/`numberOfResultsMapper` verbatim,
+  `proxy_requests = 0`, `{"vector": "#$qOption.clip##", "limit": 30,
+  "with_payload": true}` and the `id,title,thumb:thumb` field spec — so
+  `create_case --endpoint-url http://localhost:6333/collections/esci/points/search`
+  produces an endpoint Quepid can actually read. A template is a whole search
+  configuration, not just a DSL.
+- `quepid_datasets`, a fifth app, installed only so Django finds those commands.
+  It owns no models and touches no database. Adding a dataset is a module under
+  `quepid_datasets/datasets/` — `wands.py`, `esci.py` over the shared
+  definitions in `base.py` — registered in that package's `__init__.py`; nothing
+  in the commands is dataset-aware. The API client the three share is
+  `quepid_datasets/client.py`, their common flags and error handling
+  `base_command.py`.
+- **`pyarrow`** in `quepid_api/requirements.txt` — ESCI ships as parquet.
+  Imported lazily inside the ESCI reader, so `wands` and the app itself still
+  start without it; **rebuild the app image** before loading ESCI inside Compose.
 - **The project's first tests.** `tests/` holds 97 integration tests that drive
   the deployed API over HTTP — nginx, gunicorn, django-ninja and a real MySQL —
   rather than importing Django. Every model is `managed = False`, so

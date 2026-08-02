@@ -76,6 +76,11 @@ Django management commands run from `quepid_api/` (where `manage.py` lives).
 `.env`, so running outside Compose requires exporting `QUEPID_DB_*`,
 `DJANGO_SECRET` and `DJANGO_DEBUG` yourself first.
 
+The three commands — `create_case`, `load_dataset`, `list_cases` (see "Loading
+datasets" below) — are the exception to the paragraph above: they speak HTTP,
+not SQL, so they need `QUEPID_API_URL` and `QUEPID_API_TOKEN` and no database
+configuration at all.
+
 Release: the version in `package.json` is the source of truth; pushing a `v*`
 tag triggers `.github/workflows/docker-image.yml`, which builds and pushes the
 `app` and `web` Docker targets. `APP_VERSION` env var feeds the version shown in
@@ -177,6 +182,12 @@ gunicorn → Django → django-ninja.
   adapter; `instructions.py` holds the server-level prompt that `settings.py`
   imports. Read-only, and every toolset scopes rows to the token owner and their
   teams — unlike the ninja routers, which do no scoping at all.
+- `quepid_api/quepid_datasets/` — the `create_case`, `load_dataset` and
+  `list_cases` commands, the dataset definitions they read and the API client
+  they share. **Not a third API surface and not an ORM writer**: it is a *client*
+  of the ninja routers (see "Loading datasets" below), so it imports `requests`,
+  never `quepid.models`. Installed only because Django discovers management
+  commands in installed apps.
 - `quepid_api/openai_utils/` + `api/toolbox.py` — a separate concern from the
   CRUD surface: Playwright scrapes a search results page, OpenAI structured
   output extracts queries and results, and a Quepid case is created from them.
@@ -262,6 +273,95 @@ Two things to know before running them:
   `docker compose build quepid-api-app && docker compose up -d quepid-api-app`
   is required before your changes are what the suite is testing. Editing a file
   and re-running `pytest` tests the *previous* build.
+
+## Loading datasets
+
+Three commands in `quepid_datasets`, one job each — the split matters, see
+below:
+
+```bash
+cd quepid_api
+export QUEPID_API_TOKEN=<thor user:add_api_key>
+
+./manage.py create_case wands "wands baseline" \
+  --endpoint-url http://quepid-api-elasticsearch:9200/wands/_search   # -> case 77
+./manage.py load_dataset wands 77    # downloads the dataset itself
+./manage.py list_cases
+```
+
+Two datasets are defined: **wands** (what every notebook at the repo root uses)
+and **esci** (what the two "image search in Qdrant" articles use, linked from
+`datasets/esci.py`).
+
+The design decisions worth knowing before changing them:
+
+- **They go through the REST API, not the ORM** — `POST /case/`, then
+  `POST /query/{case}/` and `POST /rating/query/{query}/rating/` per row. That is
+  deliberate: one run is a few hundred thousand calls through nginx, gunicorn,
+  ninja and a Rails-owned MySQL, so it exercises the same path `tests/` does at a
+  volume the suite never reaches, and a column that moved under
+  `quepid/models.py` surfaces as a 400 with the reason in the body. Keep them
+  clients: nothing here may import `quepid.models`. The shared session, token
+  and response handling live in `client.py`; the connection flags and the
+  `ApiError` → `CommandError` conversion in `base_command.py:QuepidCommand`.
+- **`load_dataset` takes a dataset name and a case id, and nothing else about
+  either.** It creates no case — that is `create_case`'s job, or Quepid's UI — so
+  a dataset can be loaded into a case configured any way at all and a re-run
+  cannot quietly produce a second case. It refuses a case that already has
+  queries unless `--append`, since nothing about a query is unique and a second
+  load would double every query and judgement rather than update anything.
+- **It has no `--path` and no dataset-slice options.** `fetch.py` downloads each
+  dataset's files from GitHub into `TMP_DIR/quepid-datasets/<name>/` and reads
+  them from there ever after; a `Dataset` carries its own `files` mapping. Two
+  things about that are load-bearing and were both found the hard way:
+  - **The two GitHub URL forms are not interchangeable.**
+    `raw.githubusercontent.com` serves the *Git LFS pointer* for an LFS
+    repository — esci-data is one, so its 51 MB parquet arrives as 133 bytes of
+    text. `github.com/<repo>/raw/<ref>/` resolves it. `fetch.py` refuses a
+    pointer rather than caching it as a dataset.
+  - **`Content-Length` is not the size of what you get.** GitHub gzips the WANDS
+    CSVs and requests decodes them, so 19942 bytes arrive against a declared
+    8063. The size check applies only when nothing was content-encoded.
+
+  Downloads are written to `<name>.part` and renamed, so an interrupted one is
+  never mistaken for a cached file. Which slice of ESCI gets read (US, small,
+  test) is three constants at the top of `datasets/esci.py`, not a flag.
+- **The consequence of one-row-per-request is that a load is not atomic.** There
+  is no bulk endpoint, so a failure part-way leaves the case half-filled; the
+  error says so. Rating failures are *collected*, not raised on the first one, so
+  a schema break reports "231873 failed, here is the first reason" instead of
+  stopping with nothing loaded.
+- **The scorer is resolved, never defaulted.** `CreateCase` defaults `scorer_id`
+  to 5 — whichever scorer is fifth in that Quepid. Each dataset names one whose
+  scale covers its ratings (WANDS labels map to 0/2/3 and ESCI's E/S/C/I to
+  3/2/1/0, so `nDCG@10` for both).
+- **A `Template` is a whole search configuration, not a DSL** — field spec,
+  engine, mapper code and `proxy_requests` too, because ESCI's `qdrant-image`
+  needs `searchapi` plus JavaScript to be readable at all, while its `es-title`
+  needs none of that. `create_case --endpoint-url` builds the endpoint from the
+  template, which is the only way a created endpoint is usable without editing
+  it in Quepid afterwards.
+- **`--doc-id-map` and `--query-options-file` are the deliberate escape hatches.**
+  Neither ratings' document ids nor per-query vectors survive the trip from a
+  dataset to an arbitrary index: Qdrant point ids are assigned when *you* index,
+  and a CLIP vector requires a model this project has no business shipping. Both
+  flags are dataset-agnostic, and unmapped judgements are dropped with a count
+  rather than posted to score nothing.
+- **One module per dataset under `quepid_datasets/datasets/`.** `base.py` holds
+  what they share (`Dataset`, `Template`, `DatasetQuery`, the small helpers),
+  `wands.py` and `esci.py` import from it, and `__init__.py` re-exports both —
+  so imports run one way. Putting the shared definitions in `__init__.py`
+  instead makes the package and its dataset modules import each other; that
+  happens to work and stops working when the order changes. Adding a dataset is
+  `<name>.py` with its `files` to download and a `read(directory)` yielding
+  `DatasetQuery`, plus a line in `DATASETS`. Nothing in the commands is
+  dataset-aware.
+- **`pyarrow` is imported inside `esci.read`, never at module scope.** ESCI ships
+  as parquet; `settings.py` imports nothing from this app but Django imports the
+  command module to build `--help`, so a top-level import would make the whole
+  CLI fail wherever pyarrow is missing. The app image needs a rebuild to have it.
+- The app is named `quepid_datasets`, not `datasets`, because that name is taken
+  by a distribution this project could plausibly install — see "Naming apps".
 
 ## The MCP server
 

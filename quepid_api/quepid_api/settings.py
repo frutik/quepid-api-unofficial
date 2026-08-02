@@ -41,6 +41,9 @@ INSTALLED_APPS = [
     'quepid',
     # Must be installed: django-mcp-server autodiscovers quepid_mcp/mcp.py.
     'quepid_mcp',
+    # Must be installed: Django only discovers management commands (here,
+    # load_dataset) in installed apps. It has no models and no URLs.
+    'quepid_datasets',
 ]
 
 # Cookie-backed so nothing ever needs a django_session table -- this project

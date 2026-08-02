@@ -16,3 +16,6 @@ pytest>=7.0.0
 pytest-django>=4.5.0
 pytest-cov>=4.0.0
 requests>=2.31.0
+# Only for `manage.py load_dataset esci`: ESCI ships as parquet. Imported
+# lazily, so nothing else here breaks without it.
+pyarrow>=17.0.0

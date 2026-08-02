@@ -10,6 +10,10 @@ Both accept the same bearer tokens as the official Quepid API. The app is
 stateless: it has no database of its own, and reads and writes the MySQL schema
 that the Rails Quepid app owns and migrates.
 
+It also ships [three commands](#commands) that build a Quepid case out of a
+public relevance dataset — WANDS or ESCI — downloading it for you, so there is
+something real to measure against within a minute of starting the stack.
+
 ## Quepid compatibility
 
 **Pick the release that matches your Quepid.** This app reflects Quepid's
@@ -78,6 +82,176 @@ open in the browser
 ## Run locally connecting to your self-hosted Quepid
 
 please specify in `.env` correct connection parameters for quepid mysql database
+
+## Commands
+
+Three Django management commands come with the app. Together they turn a public
+relevance dataset into a working Quepid case — so you can compare query DSLs
+against real judgements instead of hand-typing queries and rating them yourself.
+It is what [`wands.ipynb`](wands.ipynb) does, as commands.
+
+| | |
+| --- | --- |
+| [`create_case <dataset> <name>`](#create_case) | an empty case, configured for a dataset — query DSL, field spec, and optionally the search endpoint |
+| [`load_dataset <dataset> <case id>`](#load_dataset) | that dataset's queries and judgements, into an existing case |
+| [`list_cases`](#list_cases) | which cases exist, and which are already filled |
+
+They are **clients of this API over HTTP**, like anything else you would write
+against it — so they need a running stack and a token, not database credentials,
+and they work against any deployment, not only a local one. (A side effect worth
+knowing: one load puts a few hundred thousand calls through the whole request
+path, which is coverage the test suite never reaches.)
+
+```
+export QUEPID_API_TOKEN=<your api token>       # thor user:add_api_key
+cd quepid_api
+
+./manage.py create_case wands "wands baseline" \
+  --endpoint-url http://quepid-api-elasticsearch:9200/wands/_search
+# Created search endpoint 12 at http://quepid-api-elasticsearch:9200/wands/_search.
+# Created case 77 "wands baseline" (wands/baseline).
+# Fill it: manage.py load_dataset wands 77
+
+./manage.py load_dataset wands 77
+# Loading into case 77 "wands baseline".
+# Downloading query.csv from https://raw.githubusercontent.com/wayfair/WANDS/...
+# Reading wands from /tmp/app/quepid-datasets/wands ...
+# 480 queries, 231873 judgements
+#   480/480 queries
+#   231873/231873 ratings
+# Case 77: 480 queries, 231873 ratings.
+
+./manage.py list_cases
+#     ID  NAME                                          SCORER  TRIES  QUERIES
+#     77  wands baseline                                     1      1      480
+```
+
+Every command takes `--api-url` (defaults to `QUEPID_API_URL`, then
+`http://localhost:8081/api`), `--api-token` (defaults to `QUEPID_API_TOKEN`) and
+`--timeout`. Anything they create is owned by whoever the token belongs to.
+
+Inside the Compose stack, run them in the **running** app container so the
+download cache survives between commands:
+
+```
+docker compose exec \
+  -e QUEPID_API_TOKEN -e QUEPID_API_URL=http://localhost/api \
+  quepid-api-app python manage.py load_dataset wands 77
+```
+
+A `docker compose run --rm` works too, but each one gets a fresh `/tmp/app` and
+downloads the dataset again. The app image bakes the code in, so
+`docker compose build quepid-api-app` first if you have changed it.
+
+### Datasets
+
+Two ship with the commands, and **you download neither** — `load_dataset` fetches
+what it needs from GitHub on first use:
+
+| | |
+| --- | --- |
+| **wands** | [Wayfair WANDS](https://github.com/wayfair/WANDS/tree/main/dataset) — 480 product queries, 231873 judgements. `query.csv` + `label.csv`, 6 MB |
+| **esci** | [Amazon ESCI](https://github.com/amazon-science/esci-data/tree/main/shopping_queries_dataset) — 8956 queries, 181701 judgements, the US small-version test split. `shopping_queries_dataset_examples.parquet`, 51 MB |
+
+Labels become ratings on a 0–3 scale: WANDS' Exact/Partial/Irrelevant as 3/2/0,
+ESCI's Exact/Substitute/Complement/Irrelevant as 3/2/1/0. Judgements are keyed by
+the dataset's own document ids — WANDS product ids, ESCI ASINs — so they score
+something only if your index uses those ids too (if it does not, see
+`--doc-id-map` below).
+
+Neither **corpus** is downloaded: 90 MB of WANDS products and the ESCI-S
+metadata belong in your search engine, and Quepid stores queries and judgements,
+never documents. Indexing them is a separate step, and the notebooks at the repo
+root do it.
+
+Downloads go to `$TMP_DIR/quepid-datasets/<dataset>/` (`/tmp/app/…` in the app
+image), so the ESCI parquet is fetched once. Delete that directory to
+re-download; set `TMP_DIR` yourself to keep the cache somewhere permanent. ESCI
+is parquet, so it needs `pyarrow` — in `requirements.txt`, but **rebuild the app
+image** if you are running inside Compose.
+
+### create_case
+
+Creates the case and its try, and — with `--endpoint-url` — the search endpoint
+too, configured from one of the dataset's templates. A case that can actually run
+needs an endpoint: either one you already have (`--search-endpoint-id`) or one
+created for you, at a URL reachable **from Quepid**, not from you.
+
+| | |
+| --- | --- |
+| `--template <name>` | the search configuration: query DSL, field spec, and the engine and mapper of a created endpoint. `wands`: `baseline`, `boosted`. `esci`: `es-title`, `qdrant-image` |
+| `--search-query-file q.json` | a one-off DSL instead of the template's, e.g. the reranked variants from the notebooks. The rest of the template still applies |
+| `--endpoint-url` / `--search-endpoint-id` | create an endpoint for the case, or point it at an existing one |
+| `--scorer nDCG@10` / `--scorer-id` | scorer for the case; the default is the one whose scale matches the dataset's ratings |
+| `--field-spec` | override the template's field spec |
+| `--dry-run` | resolve everything, write nothing |
+
+### load_dataset
+
+Posts the queries and their judgements into a case that already exists. It takes
+the dataset name and the case id and **nothing about files** — it downloads what
+it needs.
+
+| | |
+| --- | --- |
+| `--limit 5` | load only the first N queries. Makes a smoke test cheap |
+| `--skip-ratings` | queries only, no judgements |
+| `--append` | load into a case that already has queries |
+| `--query-options-file f.json` | per-query options, e.g. a vector (see below) |
+| `--doc-id-map f.json` | translate the dataset's document ids (see below) |
+| `--workers 8` | concurrent rating posts. `1` matches the notebooks |
+| `--dry-run` | read and resolve everything, write nothing |
+
+`create_case` never loads data and `load_dataset` never creates a case: a dataset
+can go into a case you built in Quepid's UI, and re-running a load cannot quietly
+leave you with two cases. Loading into a case that already has queries is refused
+unless you pass `--append`, because nothing about a query is unique — a second
+load would double every query and judgement rather than update them.
+
+> ⚠️ A load is **not atomic** — there is no bulk endpoint, so it is one request
+> per row. A failure part-way leaves the case half-filled; the error says so.
+
+### list_cases
+
+Ids, names, scorer, tries and query count, newest first — the query count being
+how you tell a filled case from an empty one.
+
+| | |
+| --- | --- |
+| `--archived` | archived cases instead of active ones. `DELETE /api/case/{id}/` is a soft delete, so this is where deleted cases went |
+| `--search TEXT` | only cases whose name contains this |
+| `--limit 50` | how many to show. `0` for all |
+| `--no-counts` | skip the query count, which costs one request per case listed |
+
+### Image search in Qdrant
+
+The `qdrant-image` template rebuilds the case from [*How to evaluate image
+search in Qdrant using Quepid*](https://frutik.medium.com/how-to-evaluate-image-search-in-qdrant-using-quepid-and-the-hacks-it-takes-part-1-f8167ec5cba3):
+a `searchapi` endpoint with the article's response mapper, the
+`{"vector": "#$qOption.clip##", …}` DSL, and thumbnails in the results.
+
+Two things no dataset can provide, because both are created when *you* index the
+corpus:
+
+- `--query-options-file` — the CLIP vector for each query, as
+  `{"laptop stand": {"clip": [0.1, …]}}`. It lands in the query's options, where
+  `#$qOption.clip##` picks it up.
+- `--doc-id-map` — dataset ids to the ids your engine returns, as
+  `{"B07XYZ": 41}`. Qdrant point ids are assigned at index time and are not
+  ASINs, so without this every judgement scores nothing. Unmapped ones are
+  dropped and counted.
+
+```
+./manage.py create_case esci "images search" --template qdrant-image \
+  --endpoint-url http://localhost:6333/collections/esci/points/search
+
+./manage.py load_dataset esci 78 \
+  --query-options-file clip_vectors.json \
+  --doc-id-map point_ids.json
+```
+
+Both flags work with any dataset — `--query-options-file` is the general way to
+put anything into a query's options.
 
 ## Tests
 
