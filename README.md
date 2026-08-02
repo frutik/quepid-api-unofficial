@@ -60,6 +60,48 @@ open in the browser
 
 please specify in `.env` correct connection parameters for quepid mysql database
 
+## Tests
+
+The tests drive the API over HTTP, so they need the stack from
+"Run locally" above already running. They never import Django.
+
+> ⚠️ **They write to whatever database you point them at** — creating and
+> deleting teams, scorers, search endpoints, cases, queries, ratings and books.
+> Use a throwaway stack, never a Quepid whose data you care about.
+
+`docker-compose.yml` pins published image tags alongside `build:`, so build
+first or you will be testing the last release instead of your working copy:
+
+```
+docker compose build
+docker compose up -d
+```
+
+Then point the tests at it. `QUEPID_API_TOKEN` is the key from
+`thor user:add_api_key`; `QUEPID_TARGET` is the Quepid version the stack runs
+(`docker-compose.yml`), which selects the expected `/api/books` shape across the
+v8.4.0 schema change.
+
+```
+export QUEPID_API_TOKEN=<your api token>
+export QUEPID_TARGET=8.3.6
+npm test
+```
+
+Just one module:
+
+```
+npm run test:books
+```
+
+Nothing here fails for want of a stack. With no `QUEPID_API_TOKEN` the
+authenticated tests skip and only the handful checking that endpoints reject
+unauthenticated calls still run; with nothing listening at all, every test skips.
+
+`DELETE /api/case/{id}/` is a soft delete, so each run leaves its cases behind
+with `archived = 1`. They are hidden from `GET /api/case/` by default; see
+`tests/conftest.py` for the sweep query.
+
 ## Deploy to Kubernetes
 
 Create and edit a file with the variables specific for your environment (specify the correct 
