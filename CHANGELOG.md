@@ -41,12 +41,17 @@ observe.
 - **`quepid/admin.py`: a read-only Django admin view over `Judgements`**, for
   host projects that install this app as a dependency and already run
   `django.contrib.admin` (this project itself does not enable it). Lists
-  query, document, rating, judge and timestamp per judgement, with filters for
-  rating, judge and date; add/change/delete are disabled. All queries are
+  query, document, rating, judge, the explanation and timestamp per
+  judgement, with filters for rating, judge and date; the "I Can't Tell" /
+  "Judge Later" flags are on the detail view rather than the list, since a
+  boolean column there added little over the rating itself. Add/change/delete
+  are disabled. All queries are
   explicitly routed to `.using('quepid')`, including filter option lookups —
   Django's default `list_filter` on a `ForeignKey` reads the related model's
   default manager with no `.using()`, which would otherwise hit the unused
-  `default` sqlite alias.
+  `default` sqlite alias. On the detail view, a document field whose value is
+  an image URL (e.g. a `thumb` field ending `.png`/`.jpg`/`.webp`/…) renders as
+  an `<img>` thumbnail instead of a raw link.
 - **Three management commands that build Quepid cases from public relevance
   datasets**, each doing one thing:
   - **`create_case <case name>`** — an empty case and its try: query DSL, field

@@ -356,6 +356,46 @@ Deploy to your Kubernetes cluster
 kubectl apply -f manifests.yml
 ```
 
+## Integrating quepid into your Django stack
+
+`quepid_api/quepid/` — the models reflecting Quepid's Rails schema — is built
+as its own package (`quepid_api/pyproject.toml`, name `quepid-models`). It
+isn't published anywhere, so add it to your `requirements.txt` as a git
+reference:
+
+```
+git+https://github.com/frutik/quepid-api-unofficial.git#subdirectory=quepid_api
+```
+
+Add the `[ninja]` extra if you're also using `schemas.py` (it imports
+`django-ninja`):
+
+```
+git+https://github.com/frutik/quepid-api-unofficial.git#subdirectory=quepid_api#egg=quepid-models[ninja]
+```
+
+`mysqlclient>=2.0.3` comes along as a dependency of the package, so you don't
+need to list it separately unless you're pinning a version yourself.
+
+In `settings.py`, add a **second** entry to `DATABASES`, keyed `quepid`. The
+key must be exactly that string — every query against these models is routed
+explicitly with `.using('quepid')`, hard-coded rather than read from a
+setting, so a different alias name means the queries silently miss it:
+
+```python
+DATABASES = {
+    'default': { ... },   # your own app's database, untouched
+    'quepid': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': os.getenv('QUEPID_DB_NAME'),
+        'USER': os.getenv('QUEPID_DB_USER'),
+        'PASSWORD': os.getenv('QUEPID_DB_PASSSWORD'),  # sic, three S's — matches this repo's .env.example
+        'HOST': os.getenv('QUEPID_DB_HOST'),
+        'PORT': os.getenv('QUEPID_DB_PORT'),
+    },
+}
+```
+
 ## Auth
 
 This API uses the same API tokens as the official API. 

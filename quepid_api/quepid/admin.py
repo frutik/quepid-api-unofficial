@@ -20,11 +20,17 @@ same `.using('quepid')` queryset instead of a fresh manager call, and every
 custom filter builds its choices from that same queryset.
 """
 import json
+import re
 
 from django.contrib import admin
-from django.utils.html import format_html_join
+from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 
 from . import models as qmodels
+
+_IMAGE_URL_RE = re.compile(
+    r'^https?://\S+\.(?:png|jpe?g|gif|webp|avif|svg)(?:\?\S*)?$', re.IGNORECASE
+)
 
 
 def _document_fields(query_doc_pair):
@@ -35,6 +41,10 @@ def _document_fields(query_doc_pair):
     except (TypeError, ValueError):
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def _is_image_url(value):
+    return isinstance(value, str) and bool(_IMAGE_URL_RE.match(value))
 
 
 class JudgeListFilter(admin.SimpleListFilter):
@@ -71,8 +81,7 @@ class JudgementsAdmin(admin.ModelAdmin):
         "document",
         "rating",
         "judged_by",
-        "is_unrateable",
-        "is_judge_later",
+        "explanation",
         "created_at",
     )
     list_filter = ("rating", JudgeListFilter, "created_at")
@@ -145,11 +154,18 @@ class JudgementsAdmin(admin.ModelAdmin):
         fields = _document_fields(obj.query_doc_pair)
         if not fields:
             return None
-        return format_html_join(
-            "",
-            "<div><strong>{}</strong>: {}</div>",
-            ((key, value) for key, value in fields.items()),
-        )
+        rows = []
+        for key, value in fields.items():
+            if _is_image_url(value):
+                rows.append(format_html(
+                    '<div><strong>{}</strong>: '
+                    '<img src="{}" alt="{}" style="max-height: 80px; max-width: 160px;">'
+                    '</div>',
+                    key, value, key,
+                ))
+            else:
+                rows.append(format_html("<div><strong>{}</strong>: {}</div>", key, value))
+        return mark_safe("".join(rows))
 
     @admin.display(description="Judged by", ordering="user__name")
     def judged_by(self, obj):
