@@ -253,7 +253,7 @@ class JudgementsToolset(QuepidScoped, ModelQueryToolset):
     model = qmodels.Judgements
     fields = [
         'id', 'rating', 'unrateable', 'judge_later', 'explanation',
-        'query_doc_pair', 'user_id', 'created_at', 'updated_at',
+        'query_doc_pair', 'user', 'created_at', 'updated_at',
     ]
     extra_instructions = (
         'A judgement is one rater\'s verdict on one query/document pair, on the '
@@ -261,7 +261,9 @@ class JudgementsToolset(QuepidScoped, ModelQueryToolset):
         'the case-side equivalent -- do not mix them.\n\n'
         '"query_doc_pair" is a real reference to the "querydocpairs" '
         'collection. ' + LOOKUP_FIELD_NOTE.format(field='query_doc_pair') + '\n\n'
-        'WARNING: "user_id" ' + RAW_ID_WARNING.format(collection='users') + '\n\n'
+        '"user" identifies the rater. There is no users collection in this '
+        'server, so it cannot be resolved to a name -- report it as an id, or '
+        'get the name from Quepid itself.\n\n'
         '"rating" is a float on the book scorer\'s scale, null when the pair '
         'was skipped. "unrateable" and "judge_later" are MySQL tinyints (1, 0 '
         'or null) marking pairs the rater could not judge or deferred; null '

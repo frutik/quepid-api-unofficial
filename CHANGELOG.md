@@ -174,6 +174,13 @@ observe.
   *excludes 1* rather than filtering on 0, because `cases.archived` is nullable
   with no default in Rails — a case Quepid wrote itself can be `NULL`, and
   `NULL` still means "not archived".
+- **`Judgements.user_id` is now `Judgements.user`, a real `ForeignKey('Users')`**
+  — a fourth hand-patch on top of `inspectdb` output (see
+  `docs/quepid-compatibility.md`), needed so `Judgements` rows show a proper
+  user reference in the Django admin instead of a raw id. There is still no
+  database FK constraint backing it. `quepid_mcp/mcp.py`'s `JudgementsToolset`
+  publishes the field as `user` accordingly (was `user_id`); anything that read
+  `judgement.user_id` still works via Django's automatic `_id` attribute.
 
 ### Removed
 

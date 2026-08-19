@@ -343,7 +343,7 @@ class CuratorVariables(models.Model):
 
 class Judgements(models.Model):
     id = models.BigAutoField(primary_key=True)
-    user_id = models.IntegerField(blank=True, null=True)
+    user = models.ForeignKey('Users', models.DO_NOTHING, blank=True, null=True)
     rating = models.FloatField(blank=True, null=True)
     query_doc_pair = models.ForeignKey('QueryDocPairs', models.DO_NOTHING)
     created_at = models.DateTimeField()
@@ -355,7 +355,7 @@ class Judgements(models.Model):
     class Meta:
         managed = False
         db_table = 'judgements'
-        unique_together = (('user_id', 'query_doc_pair'),)
+        unique_together = (('user', 'query_doc_pair'),)
 
 
 class MapperWizardStates(models.Model):

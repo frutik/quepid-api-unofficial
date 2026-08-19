@@ -36,8 +36,8 @@ hard floor: `models.py` declares `books.scale`, `books.scale_with_labels` and
 ## Hand-patches carried across regenerations
 
 `CLAUDE.md` requires `models.py` to stay pure `inspectdb` output. In practice
-three deliberate deviations have accumulated, each one load-bearing, and **a
-regeneration silently drops all three**. That is the single most dangerous step
+four deliberate deviations have accumulated, each one load-bearing, and **a
+regeneration silently drops all four**. That is the single most dangerous step
 in re-targeting this project, so they are listed here rather than left to be
 rediscovered from `git log`.
 
@@ -46,32 +46,37 @@ rediscovered from `git log`.
 | `SearchEndpoints.owner` | `owner_id` IntegerField → `ForeignKey('Users')` | `989b68d` | `api/search_endpoints.py:60` assigns `owner=request.auth`, a `Users` *instance* |
 | `Tries.search_endpoint` | `search_endpoint_id` BigIntegerField → `ForeignKey('SearchEndpoints')` | `05ece2d` | `api/cases.py:102` assigns an instance; `quepid_mcp/mcp.py` publishes it as a real reference |
 | `CaseScores.queries` | `TextField` → `BinaryField` | `381ff88` | the column is `mediumblob`; `inspectdb` guesses `TextField` for blobs |
+| `Judgements.user` | `user_id` IntegerField → `ForeignKey('Users')` | *(this change)* | lets `Users` render as a proper reference in the Django admin instead of a raw id; see `quepid_mcp/mcp.py:JudgementsToolset` for the matching MCP-field update |
 
-Neither FK exists as a database constraint — `tries` carries only
-`tries_ibfk_1` on `case_id`, and `search_endpoints` has none at all — so
+None of these FKs exist as a database constraint — `tries` carries only
+`tries_ibfk_1` on `case_id`, `search_endpoints` has none at all, and
+`judgements` carries only `judgements_ibfk_1` on `query_doc_pair_id` — so
 `inspectdb` has no way to infer them and emits plain integer fields every time.
-Reverting either one reintroduces the same class of bug `tests/test_books.py:37`
+Reverting the first two reintroduces the same class of bug `tests/test_books.py:37`
 documents for books: passing a model instance into an `IntegerField`, which
 Django cannot adapt, failing inside a broad `except Exception` as a bare 400.
+`Judgements.user` has no current writer in `quepid_api/api/`, so reverting it
+is lower-risk, but it must still be re-applied to keep the admin UI and the MCP
+`user` field working.
 
-A fourth hand-patch has now **retired**: `34e6b32` commented out
+One earlier hand-patch has **retired**: `34e6b32` commented out
 `Users.openai_key` as a shim for v8.2.0+, where Rails renamed the column to
 `llm_key`. Regenerating against v8.5.0 brings it back correctly named, so the
 comment is gone. `llm_key` is Rails-encrypted at rest, but `Users` is published
 nowhere — no schema, no router, no MCP toolset — so no client ever sees the
 ciphertext.
 
-A fifth, `6d79016`, removed a hand-added `ApiKeys.check_token` classmethod and
+Another, `6d79016`, removed a hand-added `ApiKeys.check_token` classmethod and
 is the origin of the pure-`inspectdb` rule. Do not reintroduce it.
 
 **After every regeneration, verify with:**
 
 ```bash
 git diff quepid_api/quepid/models.py \
-  | grep -E '^[-+].*(owner|search_endpoint|queries) = '
+  | grep -E '^[-+].*(owner|search_endpoint|queries|user) = '
 ```
 
-Three deletions with no matching additions means the patches were dropped.
+Four deletions with no matching additions means the patches were dropped.
 
 ---
 

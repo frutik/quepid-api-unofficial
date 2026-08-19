@@ -112,19 +112,22 @@ Consequences that are easy to get wrong:
   something needs to *behave* like a model (e.g. a `Users` row that has to
   satisfy DRF's `IsAuthenticated`), adapt it at the boundary that needs it and
   leave the model alone; `quepid_mcp/auth.py:QuepidPrincipal` is the worked example.
-- **…with exactly three documented exceptions, which a regeneration WILL drop.**
+- **…with exactly four documented exceptions, which a regeneration WILL drop.**
   The rule above is about *behaviour*; these are field-type corrections
   `inspectdb` cannot infer, and re-applying them by hand is a required step of
   every regeneration:
   - `SearchEndpoints.owner` — `ForeignKey('Users')`, not `owner_id` IntegerField
   - `Tries.search_endpoint` — `ForeignKey('SearchEndpoints')`, not `search_endpoint_id`
   - `CaseScores.queries` — `BinaryField`, not `TextField` (the column is a `mediumblob`)
+  - `Judgements.user` — `ForeignKey('Users')`, not `user_id` IntegerField
 
-  Neither FK exists as a database constraint, so `inspectdb` emits plain integer
-  fields every time. `api/search_endpoints.py:60` and `api/cases.py:102` assign
-  *model instances* to those two, so reverting them breaks both endpoints with a
-  bare 400. `docs/quepid-compatibility.md` §"Hand-patches carried across
-  regenerations" has the table, the origin commits and the verifying diff.
+  None of these FKs exist as a database constraint, so `inspectdb` emits plain
+  integer fields every time. `api/search_endpoints.py:60` and `api/cases.py:102`
+  assign *model instances* to the first two, so reverting them breaks both
+  endpoints with a bare 400; `Judgements.user` exists so a `Users` instance
+  renders as a proper reference in the Django admin instead of a raw id.
+  `docs/quepid-compatibility.md` §"Hand-patches carried across regenerations"
+  has the table, the origin commits and the verifying diff.
 - **Every model is `managed = False`.** Never run `makemigrations` or `migrate`.
   There are no `migrations/` directories in this project and there should not be
   — Rails owns the schema, and Django writing to it would corrupt a live Quepid
@@ -141,10 +144,11 @@ Consequences that are easy to get wrong:
   `api/cases.py:create_case`).
 - **Many logical foreign keys are plain `IntegerField`s**, not `ForeignKey`s —
   `Cases.scorer_id`, `Cases.book_id`, `Books.owner_id`, `Ratings.user_id`,
-  `Judgements.user_id`, `Snapshots.try_id`, and the `Teams*` junction tables.
+  `Snapshots.try_id`, and the `Teams*` junction tables.
   These cannot be traversed with `select_related`, `__` lookups, or joins; fetch
   the target row separately by pk. Real `ForeignKey`s do exist elsewhere
-  (`Queries.case`, `Ratings.query`, `QueryDocPairs.book`, `Cases.owner`, …), so
+  (`Queries.case`, `Ratings.query`, `QueryDocPairs.book`, `Cases.owner`,
+  `Judgements.user`, …), so
   check the model before assuming either way.
 - **Booleans are MySQL tinyints surfaced as `IntegerField`** (`archived`,
   `public`, `nightly`, `all_rated`, `locked`). `null` is a distinct third state,
