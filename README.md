@@ -374,6 +374,21 @@ Add the `[ninja]` extra if you're also using `schemas.py` (it imports
 git+https://github.com/frutik/quepid-api-unofficial.git#subdirectory=quepid_api#egg=quepid-models[ninja]
 ```
 
+**To pin a version**, append `@<tag>` before the `#subdirectory=...` fragment
+— every release from the table in ["Quepid compatibility"](#quepid-compatibility)
+has a matching `v*` tag, e.g. `v0.9.3`:
+
+```
+git+https://github.com/frutik/quepid-api-unofficial.git@v0.9.3#subdirectory=quepid_api
+```
+
+Pin to the tag whose Quepid range matches the Quepid you're running, not just
+to the newest one — `main` and the latest release line target different,
+non-overlapping Quepid versions (see the compatibility table). Note that
+`quepid_api/pyproject.toml`'s own `version` field (`0.1.0`) does **not** track
+these tags — `pip show quepid-models` won't tell you which tag you have
+installed, only the tag/ref in your `requirements.txt` does.
+
 `mysqlclient>=2.0.3` comes along as a dependency of the package, so you don't
 need to list it separately unless you're pinning a version yourself.
 
