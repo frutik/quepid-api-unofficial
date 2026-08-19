@@ -1,6 +1,6 @@
 {
   "name": "quepid-api-unofficial",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "Unofficial Quepid API: an OpenAPI 3.1 HTTP API and a read-only MCP server over a Quepid database",
   "main": "index.js",
   "scripts": {
