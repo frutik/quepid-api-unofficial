@@ -41,17 +41,20 @@ observe.
 - **`quepid/admin.py`: a read-only Django admin view over `Judgements`**, for
   host projects that install this app as a dependency and already run
   `django.contrib.admin` (this project itself does not enable it). Lists
-  query, document, rating, judge, the explanation and timestamp per
-  judgement, with filters for rating, judge and date; the "I Can't Tell" /
-  "Judge Later" flags are on the detail view rather than the list, since a
-  boolean column there added little over the rating itself. Add/change/delete
-  are disabled. All queries are
+  query, document, an image thumbnail, rating, judge, the explanation and
+  timestamp per judgement, with filters for rating, judge and date; the "I
+  Can't Tell" / "Judge Later" flags are on the detail view rather than the
+  list, since a boolean column there added little over the rating itself.
+  Add/change/delete are disabled. All queries are
   explicitly routed to `.using('quepid')`, including filter option lookups —
   Django's default `list_filter` on a `ForeignKey` reads the related model's
   default manager with no `.using()`, which would otherwise hit the unused
-  `default` sqlite alias. On the detail view, a document field whose value is
-  an image URL (e.g. a `thumb` field ending `.png`/`.jpg`/`.webp`/…) renders as
-  an `<img>` thumbnail instead of a raw link.
+  `default` sqlite alias. The document's image (the first document field
+  whose value is an image URL — `thumb`/`thumbnail`/`image`/`img`/`picture`/
+  `photo` checked first, then any other field) gets its own read-only "Image"
+  field on the detail view and its own column in the list, both rendered as
+  an `<img>` thumbnail; "Document fields" still lists every field as plain
+  text, images included, so no field is dropped from that raw view.
 - **Three management commands that build Quepid cases from public relevance
   datasets**, each doing one thing:
   - **`create_case <case name>`** — an empty case and its try: query DSL, field

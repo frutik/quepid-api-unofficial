@@ -23,8 +23,7 @@ import json
 import re
 
 from django.contrib import admin
-from django.utils.html import format_html
-from django.utils.safestring import mark_safe
+from django.utils.html import format_html, format_html_join
 
 from . import models as qmodels
 
@@ -45,6 +44,18 @@ def _document_fields(query_doc_pair):
 
 def _is_image_url(value):
     return isinstance(value, str) and bool(_IMAGE_URL_RE.match(value))
+
+
+def _document_image_url(query_doc_pair):
+    fields = _document_fields(query_doc_pair)
+    for key in ("thumb", "thumbnail", "image", "img", "picture", "photo"):
+        value = fields.get(key)
+        if _is_image_url(value):
+            return value
+    for value in fields.values():
+        if _is_image_url(value):
+            return value
+    return None
 
 
 class JudgeListFilter(admin.SimpleListFilter):
@@ -79,6 +90,7 @@ class JudgementsAdmin(admin.ModelAdmin):
         "id",
         "query",
         "document",
+        "document_image",
         "rating",
         "judged_by",
         "explanation",
@@ -101,6 +113,7 @@ class JudgementsAdmin(admin.ModelAdmin):
         "query",
         "information_need",
         "document",
+        "document_image",
         "document_fields_display",
         "rating",
         "is_unrateable",
@@ -154,18 +167,21 @@ class JudgementsAdmin(admin.ModelAdmin):
         fields = _document_fields(obj.query_doc_pair)
         if not fields:
             return None
-        rows = []
-        for key, value in fields.items():
-            if _is_image_url(value):
-                rows.append(format_html(
-                    '<div><strong>{}</strong>: '
-                    '<img src="{}" alt="{}" style="max-height: 80px; max-width: 160px;">'
-                    '</div>',
-                    key, value, key,
-                ))
-            else:
-                rows.append(format_html("<div><strong>{}</strong>: {}</div>", key, value))
-        return mark_safe("".join(rows))
+        return format_html_join(
+            "",
+            "<div><strong>{}</strong>: {}</div>",
+            ((key, value) for key, value in fields.items()),
+        )
+
+    @admin.display(description="Image")
+    def document_image(self, obj):
+        url = _document_image_url(obj.query_doc_pair)
+        if not url:
+            return None
+        return format_html(
+            '<img src="{}" alt="document image" style="max-height: 80px; max-width: 160px;">',
+            url,
+        )
 
     @admin.display(description="Judged by", ordering="user__name")
     def judged_by(self, obj):
