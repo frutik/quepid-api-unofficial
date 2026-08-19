@@ -7,7 +7,7 @@ name = "quepid-models"
 version = "0.1.0"
 description = "Django models mirroring the Quepid Rails schema (inspectdb output)"
 requires-python = ">=3.11"
-dependencies = ["Django>=5.0"]
+dependencies = ["Django>=5.0", "mysqlclient>=2.0.3"]
 
 [project.optional-dependencies]
 ninja = ["django-ninja"]
