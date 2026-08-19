@@ -145,6 +145,13 @@ observe.
   `requests` in `quepid_api/requirements.txt`.
 - `GET /api/case/` accepts **`?archived=true`** to list archived cases instead of
   active ones.
+- **`quepid_api/quepid/test_customizations.py`**, a second, DB-free unit test
+  file asserting all four hand-patched field types in `models.py`
+  (`SearchEndpoints.owner`, `Tries.search_endpoint`, `CaseScores.queries`,
+  `Judgements.user`) directly, rather than relying on an endpoint or the MCP
+  `$match` traversal above breaking indirectly once a regeneration drops one.
+  Deliberately outside `tests/` — see CLAUDE.md's "Testing" section for how to
+  run it.
 
 ### Changed
 

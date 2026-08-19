@@ -128,6 +128,10 @@ Consequences that are easy to get wrong:
   renders as a proper reference in the Django admin instead of a raw id.
   `docs/quepid-compatibility.md` §"Hand-patches carried across regenerations"
   has the table, the origin commits and the verifying diff.
+  `quepid_api/quepid/test_customizations.py` asserts all four field types
+  directly against `models.py` — a DB-free unit test, not an HTTP integration
+  test, so it fails the moment a regeneration drops one, before anything
+  calling the affected endpoint would (see "Testing" below).
 - **Every model is `managed = False`.** Never run `makemigrations` or `migrate`.
   There are no `migrations/` directories in this project and there should not be
   — Rails owns the schema, and Django writing to it would corrupt a live Quepid
@@ -277,6 +281,26 @@ Two things to know before running them:
   `docker compose build quepid-api-app && docker compose up -d quepid-api-app`
   is required before your changes are what the suite is testing. Editing a file
   and re-running `pytest` tests the *previous* build.
+
+### `quepid/test_customizations.py` — the one exception to "HTTP integration only"
+
+A second, separate test file, deliberately outside `tests/` and not run by a
+bare `pytest` from the repo root. It asserts the four hand-patched field types
+listed above (`SearchEndpoints.owner`, `Tries.search_endpoint`,
+`CaseScores.queries`, `Judgements.user`) directly against `quepid/models.py` —
+no HTTP, no MySQL, just Django field introspection, so it needs
+`DJANGO_SETTINGS_MODULE` but no `QUEPID_DB_*`. `quepid/conftest.py` does that
+bootstrap. Run it inside the app image, where Django and this app's other
+dependencies are already installed:
+
+```bash
+docker compose exec quepid-api-app pytest quepid/test_customizations.py
+```
+
+It exists because `tests/` only notices a dropped hand-patch indirectly, once
+something calling the affected endpoint gets a bare 400 — this catches it at
+the model definition itself, immediately after a regeneration, before any
+endpoint is exercised.
 
 ## Loading datasets
 
