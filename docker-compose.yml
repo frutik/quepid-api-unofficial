@@ -55,6 +55,20 @@ services:
       interval: 10s
       retries: 5
       start_period: 10s
+  quepid-api-postgres:
+#    container_name: quepid_postgres
+    image: postgres:17-alpine
+    ports:
+      - 35432:5432
+    environment:
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_USER=root
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
   quepid-api-mysql:
     image: mysql:8.4.4
     platform: linux/amd64
@@ -74,13 +88,18 @@ services:
     volumes:
       - ./data/mysql/:/var/lib/mysql
   quepid-api-quepid:
-    image: o19s/quepid:8.5.0
+#    image: o19s/quepid:8.5.0
+    build:
+      context: ./quepid
+      dockerfile: Dockerfile.prod
     container_name: quepid-api-quepid
     platform: linux/amd64
     ports:
       - "3000:3000"
 #    command: ["/usr/bin/sleep", "infinity"]
     depends_on:
+      quepid-api-postgres:
+        condition: service_healthy
       quepid-api-mysql:
         condition: service_healthy
       quepid-api-elasticsearch:
@@ -91,16 +110,18 @@ services:
       PORT: "3000"
       RACK_ENV: "production"
       RAILS_ENV: "production"
-      FORCE_SSL: "false"
       MAX_THREADS: "2"
       WEB_CONCURRENCY: "2"
+      DB_ADAPTER: "postgresql"
       RAILS_LOG_TO_STDOUT: "true"
       RAILS_SERVE_STATIC_FILES: "true"
       TC_URL: ""
       PRIVACY_URL: ""
       COOKIES_URL: ""
       QUEPID_GA: ""
-      QUEPID_DOMAIN: "https://example.com"
+      QUEPID_DOMAIN: "localhost:3000"
+      QUEPID_PROTOCOL: "http"
+      FORCE_SSL: "false"
       EMAIL_MARKETING_MODE: "false"
       QUEPID_DEFAULT_SCORER: "AP@10"
       SIGNUP_ENABLED: "true"
@@ -109,7 +130,8 @@ services:
       EMAIL_SENDER: ""
       QUERY_LIST_SORTABLE: "true"
       QUEPID_PROPHET_ANALYTICS: "true"
-      DATABASE_URL: "mysql2://root:password@quepid-api-mysql:3306/db"
+      DATABASE_URL: "postgresql://root:password@quepid-api-postgres:5432/db"
+#      DATABASE_URL: "mysql2://root:password@quepid-api-mysql:3306/db"
       SECRET_KEY_BASE: "<secret key base>"
   quepid-api-app:
     container_name: quepid-api-app

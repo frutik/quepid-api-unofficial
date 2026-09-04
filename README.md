@@ -411,6 +411,31 @@ DATABASES = {
 }
 ```
 
+## Loading datasets into any Quepid, from your own Django stack
+
+`quepid_api/quepid_datasets/` — the `create_case`, `load_dataset` and
+`list_cases` management commands — is likewise built as its own package
+(`quepid_api/quepid_datasets/pyproject.toml`, name `quepid-datasets`), separate
+from `quepid-models` above. It talks to Quepid over HTTP only — no models, no
+database access — so it has nothing to do with the Quepid version matrix and
+nothing to do with the `quepid` database alias. Add it as a git reference:
+
+```
+git+https://github.com/frutik/quepid-api-unofficial.git#subdirectory=quepid_api/quepid_datasets
+```
+
+Add the `[esci]` extra if you're loading the `esci` dataset, which ships as
+parquet (`pyarrow` is otherwise not installed):
+
+```
+git+https://github.com/frutik/quepid-api-unofficial.git#subdirectory=quepid_api/quepid_datasets#egg=quepid-datasets[esci]
+```
+
+Add `'quepid_datasets'` to `INSTALLED_APPS` — Django only discovers management
+commands in installed apps, and this one has no models or URLs to register.
+Then the commands work exactly as documented above, against `QUEPID_API_URL`
+and `QUEPID_API_TOKEN` rather than any `QUEPID_DB_*` setting.
+
 ## Auth
 
 This API uses the same API tokens as the official API. 

@@ -38,6 +38,14 @@ observe.
 
 ### Added
 
+- **`quepid_datasets` is now also installable on its own**, as the
+  `quepid-datasets` package (`quepid_api/quepid_datasets/pyproject.toml`),
+  separate from `quepid-models`. It has nothing to do with the Rails schema or
+  the `quepid` database alias — it's an HTTP client of this API's own
+  endpoints — so a host project can pull in `create_case`, `load_dataset` and
+  `list_cases` without also taking `quepid-models`' MySQL dependency. See
+  ["Loading datasets into any Quepid, from your own Django
+  stack"](README.md#loading-datasets-into-any-quepid-from-your-own-django-stack).
 - **`quepid/admin.py`: a read-only Django admin view over `Judgements`**, for
   host projects that install this app as a dependency and already run
   `django.contrib.admin` (this project itself does not enable it). Lists
