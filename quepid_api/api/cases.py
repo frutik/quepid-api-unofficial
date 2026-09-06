@@ -1,13 +1,14 @@
 import logging
 
 from ninja import Router
+from django.db import transaction
 from django.utils import timezone
 import quepid.models as qmodels
 from quepid.schemas import Case
 from typing import List
 from ninja.pagination import paginate
 from ninja import Schema
-from .utils import _by_pk
+from .utils import _by_pk, _member_teams
 from ninja import ModelSchema
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,7 @@ router = Router(tags=["Cases management"])
 
 class CreateCase(Schema):
     name: str
+    team_id: int = None
     scorer_id: int = 5
     nightly: int = 1
     book_id: int = None
@@ -75,37 +77,75 @@ def view_cases(request, archived: bool = False):
         .exclude(archived=1)
     
     
+def _team_for_new_case(user, team_id):
+    """Decide which team a new case should be shared with.
+
+    Returns ``(team, error)``. An explicit ``team_id`` wins, provided the caller
+    is in that team. Otherwise a caller who belongs to exactly one team gets
+    that one automatically -- the common case, and the one the UI's "Share case"
+    dialog would otherwise have to be used for. A caller in no team gets an
+    unshared case, which is what Quepid does by default anyway. A caller in
+    several is asked to say which, because guessing would silently expose the
+    case to the wrong people.
+    """
+    teams = _member_teams(user)
+
+    if team_id is not None:
+        team = teams.filter(pk=team_id).first()
+        if not team:
+            return None, 'Unknown team, or you are not a member of it.'
+        return team, None
+
+    candidates = list(teams)
+    if len(candidates) > 1:
+        listed = ', '.join(f'{t.id} ({t.name})' for t in candidates)
+        return None, ('You belong to more than one team -- pass team_id to say '
+                      f'which one this case belongs to. Yours: {listed}.')
+
+    return (candidates[0] if candidates else None), None
+
+
 @router.post("/", response={200: Case, 400: str})
 def create_case(request, data: CreateCase):
     try:
         now = timezone.now()
-        case = qmodels.Cases.objects.using('quepid').create(
-            case_name=data.name,
-            scorer_id=data.scorer_id,
-            created_at=now,
-            updated_at=now,
-            last_try_number=1,
-            nightly=data.nightly,
-            archived=0,
-            owner=request.auth
-        )
-        logger.info(case)
+
+        # Resolved before anything is written, so an ambiguous or unusable team
+        # is rejected without leaving a half-built case behind.
+        team, team_error = _team_for_new_case(request.auth, data.team_id)
+        if team_error:
+            return 400, team_error
+
         search_endpoint = None
         if search_endpoint_id := data.search_endpoint_id:
             if not (search_endpoint := _by_pk(qmodels.SearchEndpoints, search_endpoint_id)):
                 return 400, 'Unknown search endpoint.'
-        logger.info([case, search_endpoint])
-        qmodels.Tries.objects.using('quepid').create(
-            try_number=1,
-            case=case,
-            query_params=data.search_query or {},
-            search_endpoint=search_endpoint,
-            created_at=now,
-            updated_at=now,
-            number_of_rows=30,
-            field_spec=data.fields_mapping,
-            escape_query=1
-        )
+
+        with transaction.atomic(using='quepid'):
+            case = qmodels.Cases.objects.using('quepid').create(
+                case_name=data.name,
+                scorer_id=data.scorer_id,
+                created_at=now,
+                updated_at=now,
+                last_try_number=1,
+                nightly=data.nightly,
+                archived=0,
+                owner=request.auth
+            )
+            logger.info([case, search_endpoint, team])
+            qmodels.Tries.objects.using('quepid').create(
+                try_number=1,
+                case=case,
+                query_params=data.search_query or {},
+                search_endpoint=search_endpoint,
+                created_at=now,
+                updated_at=now,
+                number_of_rows=30,
+                field_spec=data.fields_mapping,
+                escape_query=1
+            )
+            if team:
+                qmodels.TeamsCases.objects.using('quepid').create(team=team, case=case)
         return case
     except Exception as e:
         return 400, str(e)

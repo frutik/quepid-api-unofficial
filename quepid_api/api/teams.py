@@ -3,10 +3,11 @@ from ninja import Router
 from django.db import transaction
 from django.utils import timezone
 import quepid.models as qmodels
-from quepid.schemas import Team
+from quepid.schemas import Case, Team
 from typing import List
 from ninja.pagination import paginate
 from ninja import Schema
+from .utils import _member_team, _member_teams
 
 logger = logging.getLogger(__name__)
 
@@ -21,28 +22,8 @@ class UpdateTeam(Schema):
     name: str
 
 
-def _member_teams(user):
-    """Teams the caller belongs to.
-
-    Quepid has no owner column on teams, so a row in teams_members is the only
-    notion of access to a team there is -- the same rule the MCP layer applies
-    in ``quepid_mcp.mcp._team_ids``. Ordered so ``@paginate`` gets a stable
-    sequence to slice.
-    """
-    member_of = qmodels.TeamsMembers.objects \
-        .using('quepid') \
-        .filter(member_id=user.id) \
-        .values('team_id')
-
-    return qmodels.Teams.objects \
-        .using('quepid') \
-        .filter(id__in=member_of) \
-        .order_by('id')
-
-
-def _member_team(user, id):
-    """One team, but only if the caller is a member of it."""
-    return _member_teams(user).filter(pk=id).first()
+class ShareCase(Schema):
+    case_id: int
 
 
 @router.get("/", response=List[Team])
@@ -84,6 +65,71 @@ def create_team(request, data: CreateTeam):
         return 400, str(e)
         
         
+@router.get("/{id}/cases/", response={200: List[Case], 404: None})
+def view_team_cases(request, id: int):
+    """List the cases shared with a team the caller belongs to"""
+    team = _member_team(request.auth, id)
+    if not team:
+        return 404, None
+
+    shared = qmodels.TeamsCases.objects \
+        .using('quepid') \
+        .filter(team_id=team.id) \
+        .values('case_id')
+
+    return 200, qmodels.Cases.objects \
+        .using('quepid') \
+        .filter(id__in=shared) \
+        .order_by('id')
+
+
+@router.post("/{id}/cases/", response={200: Case, 404: None, 400: str})
+def share_case_with_team(request, id: int, data: ShareCase):
+    """Share one of the caller's own cases with a team they belong to.
+
+    This writes the teams_cases row behind the UI's "Share case" dialog and its
+    "Associated Teams" column. Creating a team and a case through the API
+    leaves the two unconnected until something links them here.
+
+    Idempotent: sharing an already-shared case is a no-op, not a duplicate-key
+    error, since teams_cases is keyed on (case_id, team_id).
+    """
+    team = _member_team(request.auth, id)
+    if not team:
+        return 404, None
+
+    # Deliberately owner-only: being able to see a case because someone else
+    # shared it with you is not a licence to hand it to further teams.
+    case = qmodels.Cases.objects \
+        .using('quepid') \
+        .filter(pk=data.case_id, owner_id=request.auth.id) \
+        .first()
+    if not case:
+        return 400, 'Unknown case, or not owned by you.'
+
+    already_shared = qmodels.TeamsCases.objects \
+        .using('quepid') \
+        .filter(team_id=team.id, case_id=case.id) \
+        .exists()
+    if not already_shared:
+        qmodels.TeamsCases.objects.using('quepid').create(team=team, case=case)
+    return 200, case
+
+
+@router.delete("/{id}/cases/{case_id}/", response={204: None, 404: None})
+def unshare_case_from_team(request, id: int, case_id: int):
+    """Stop sharing a case with a team, leaving the case itself untouched"""
+    team = _member_team(request.auth, id)
+    if not team:
+        return 404, None
+
+    deleted, _ = qmodels.TeamsCases.objects \
+        .using('quepid') \
+        .filter(team_id=team.id, case_id=case_id) \
+        .delete()
+    return (204, None) if deleted else (404, None)
+
+
 @router.put("/{id}/", response={200: Team, 404: None, 400: str})
 def update_team(request, id: int, data: UpdateTeam):
     """Update an existing team"""
