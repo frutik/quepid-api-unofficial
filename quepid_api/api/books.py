@@ -26,6 +26,14 @@ class CreateBook(Schema):
     support_implicit_judgements: bool = False
     show_rank: bool = False
     description: str = ""
+    #: The ratings a judge may give, e.g. [0, 1, 2, 3]. Quepid's own UI copies
+    #: this off the scorer you pick when creating a book; nothing picks a scorer
+    #: here, so a book made through this API has no scale unless you say so --
+    #: and a book with no scale renders no rating buttons at all.
+    scale: List[int] = None
+    #: What each rating means, e.g. {"0": "Irrelevant", "3": "Exact"}. Keys are
+    #: strings, since Rails reads them with ``dig(score.to_s)``.
+    scale_with_labels: dict = None
 
 
 class UpdateBook(Schema):
@@ -33,6 +41,8 @@ class UpdateBook(Schema):
     support_implicit_judgements: bool = None
     show_rank: bool = None
     description: str = None
+    scale: List[int] = None
+    scale_with_labels: dict = None
 
 
 class CreateQueryDocPair(Schema):
@@ -52,6 +62,39 @@ class CreateQueryDocPair(Schema):
 class QueryDocPairsWritten(Schema):
     created: int
     skipped: int
+
+
+def _dump_scale(scale):
+    """A list of ratings, as the comma-joined varchar ``books.scale`` holds.
+
+    Mirrors ``ScaleSerializer.dump``, sorted the way its ``load`` returns it so
+    a value written here reads back identically. An empty list is stored as
+    NULL, which is what a book Quepid has never given a scale looks like.
+    """
+    return ','.join(str(value) for value in sorted(scale)) if scale else None
+
+
+def _scale_is_locked(book, scale):
+    """Whether Rails would refuse this scale change. Returns a reason, or None.
+
+    ``Book#scale_cannot_be_changed_if_judgements_exist`` rejects changing the
+    *values* once anything has been judged against them, while still allowing
+    the labels to change. Enforced here too: without it this API could put a
+    book into a state Quepid's own UI considers invalid, and the judgements
+    already made would silently be on a different scale from the book.
+    """
+    if scale is None or _dump_scale(scale) == book.scale:
+        return None
+
+    judged = qmodels.Judgements.objects \
+        .using('quepid') \
+        .filter(query_doc_pair__book_id=book.id) \
+        .exists()
+    if not judged:
+        return None
+
+    return (f'Cannot change the scale of a book that has judgements: they were '
+            f'made against {book.scale!r}. Labels can still be changed.')
 
 
 def _reachable_book(user, book_id):
@@ -116,7 +159,12 @@ def create_book(request, data: CreateBook):
                 archived=0,
                 created_at=now,
                 updated_at=now,
-                owner_id=request.auth.id
+                owner_id=request.auth.id,
+                scale=_dump_scale(data.scale),
+                # TEXT holding JSON (Rails serializes it), like document_fields
+                # on a query/doc pair and unlike that row's options column.
+                scale_with_labels=(json.dumps(data.scale_with_labels)
+                                   if data.scale_with_labels else None),
             )
             if team:
                 qmodels.TeamsBooks.objects.using('quepid').create(
@@ -142,6 +190,12 @@ def update_book(request, book_id: int, data: UpdateBook):
             update_fields['support_implicit_judgements'] = 1 if data.support_implicit_judgements else 0
         if data.show_rank is not None:
             update_fields['show_rank'] = 1 if data.show_rank else 0
+        if locked := _scale_is_locked(book, data.scale):
+            return 400, locked
+        if data.scale is not None:
+            update_fields['scale'] = _dump_scale(data.scale)
+        if data.scale_with_labels is not None:
+            update_fields['scale_with_labels'] = json.dumps(data.scale_with_labels)
         
         if update_fields:
             update_fields['updated_at'] = timezone.now()

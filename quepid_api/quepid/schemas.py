@@ -1,5 +1,7 @@
 import json
 
+from typing import List
+
 from ninja import ModelSchema
 
 from .models import *
@@ -46,6 +48,21 @@ def _as_dict(raw):
         return {}
 
 
+def _as_scale(raw):
+    """Read ``books.scale``, which is a varchar of comma-joined integers.
+
+    The Rails side of this is ``ScaleSerializer``: dump joins on a comma, load
+    splits, casts with ``Integer()`` and sorts. Sorting on the way out is part
+    of the contract, not tidiness -- ``JudgementHelper#generate_rating_buttons``
+    walks the scale in order to lay the rating buttons out.
+    """
+    if not raw:
+        return []
+    if isinstance(raw, list):
+        return sorted(raw)
+    return sorted(int(part) for part in str(raw).split(',') if part.strip())
+
+
 class Query(ModelSchema):
     query_options: dict
 
@@ -90,6 +107,22 @@ class Rating(ModelSchema):
 
 
 class Book(ModelSchema):
+    #: The ratings a judge may give in this book, ascending. Stored as the
+    #: varchar "0,1,2,3"; rendered as a list, so it round-trips with CreateBook.
+    scale: List[int]
+    #: What each of those ratings means, e.g. {"0": "Irrelevant", "3": "Exact"}.
+    #: Keys are strings: Rails looks them up with ``dig(score.to_s)``.
+    scale_with_labels: dict
+
     class Meta:
         model = Books
         fields = "__all__"
+        exclude = ['scale', 'scale_with_labels', ]
+
+    @staticmethod
+    def resolve_scale(obj):
+        return _as_scale(getattr(obj, "scale", None))
+
+    @staticmethod
+    def resolve_scale_with_labels(obj):
+        return _as_dict(getattr(obj, "scale_with_labels", None))

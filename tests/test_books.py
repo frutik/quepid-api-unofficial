@@ -142,3 +142,118 @@ def test_books_require_authentication(live_stack):
     """Auth is applied globally on the NinjaAPI, so no router opts out."""
     response = requests.get(f"{BASE_URL}/books/", timeout=10)
     assert response.status_code == 401
+
+
+# --- scale ------------------------------------------------------------------
+#
+# ``books.scale`` is the set of ratings a judge may give, held as the varchar
+# "0,1,2,3" and read by ScaleSerializer into a sorted list of ints. Quepid's own
+# UI never asks for it directly: creating a book there means picking a scorer,
+# and ``books_controller.rb:121`` copies that scorer's scale onto the book.
+# Nothing picks a scorer on this path, so without these fields a book made
+# through the API has no scale at all -- and since
+# ``JudgementHelper#generate_rating_buttons`` maps over ``book.scale`` to build
+# the rating buttons, such a book renders none and cannot be judged by hand.
+#
+# Note this is not what the *LLM* judge rates against. ``LlmService`` sends only
+# the query and the document fields; the 0-3 instruction lives in the AI judge
+# user's system_prompt. The scale governs the human judging screen and labels.
+
+
+def test_a_book_created_without_a_scale_has_none(book):
+    """The default, and the reason these fields exist: no scale, no buttons."""
+    assert book["scale"] == []
+    assert book["scale_with_labels"] == {}
+
+
+def test_create_book_with_a_scale(api, book_payload):
+    payload = {
+        **book_payload,
+        "scale": [0, 1, 2, 3],
+        "scale_with_labels": {"0": "Irrelevant", "3": "Exact"},
+    }
+    created = api.post(f"{BASE_URL}/books/", json=payload, timeout=30).json()
+    try:
+        assert created["scale"] == [0, 1, 2, 3]
+        assert created["scale_with_labels"] == {"0": "Irrelevant", "3": "Exact"}
+    finally:
+        api.delete(f"{BASE_URL}/books/{created['id']}", timeout=10)
+
+
+def test_scale_is_stored_sorted(api, book_payload):
+    """ScaleSerializer.load sorts on read, so an unsorted scale must round-trip.
+
+    Sorting is not cosmetic: generate_rating_buttons lays the buttons out in
+    scale order and colours them by position within it, so an unsorted scale
+    would put the ratings on screen in whatever order they were sent.
+    """
+    created = api.post(
+        f"{BASE_URL}/books/", json={**book_payload, "scale": [3, 0, 2, 1]}, timeout=30
+    ).json()
+    try:
+        assert created["scale"] == [0, 1, 2, 3]
+    finally:
+        api.delete(f"{BASE_URL}/books/{created['id']}", timeout=10)
+
+
+def test_scale_survives_the_varchar_it_is_stored_in(api, book_payload):
+    """The column is a varchar of joined integers, not a json column.
+
+    Which makes the round trip the thing worth asserting: the response renders
+    a list, the database holds "0,1,2,3", and Rails reads back [0, 1, 2, 3].
+    """
+    created = api.post(
+        f"{BASE_URL}/books/", json={**book_payload, "scale": [0, 1, 2, 3]}, timeout=30
+    ).json()
+    try:
+        fetched = api.get(f"{BASE_URL}/books/{created['id']}", timeout=10).json()
+        assert fetched["scale"] == [0, 1, 2, 3]
+    finally:
+        api.delete(f"{BASE_URL}/books/{created['id']}", timeout=10)
+
+
+def test_update_book_sets_the_scale(api, book):
+    response = api.patch(
+        f"{BASE_URL}/books/{book['id']}",
+        json={"scale": [0, 1], "scale_with_labels": {"0": "No", "1": "Yes"}},
+        timeout=10,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["scale"] == [0, 1]
+    assert response.json()["scale_with_labels"] == {"0": "No", "1": "Yes"}
+
+
+def test_updating_other_fields_leaves_the_scale_alone(api, book):
+    api.patch(f"{BASE_URL}/books/{book['id']}", json={"scale": [0, 1, 2, 3]}, timeout=10)
+    renamed = api.patch(
+        f"{BASE_URL}/books/{book['id']}", json={"name": unique("book")}, timeout=10
+    )
+    assert renamed.json()["scale"] == [0, 1, 2, 3]
+
+
+def test_resending_an_unchanged_scale_is_allowed(api, book):
+    """The guard in ``_scale_is_locked`` compares values, not whether it was sent.
+
+    An updater that echoes the whole book back -- read, edit one field, PATCH --
+    must not be refused for a scale it is not actually touching. Only half
+    observable here: with no judgements in the book the guard short-circuits
+    before it ever compares, so see the note below for the other half.
+    """
+    api.patch(f"{BASE_URL}/books/{book['id']}", json={"scale": [0, 1, 2, 3]}, timeout=10)
+    response = api.patch(
+        f"{BASE_URL}/books/{book['id']}",
+        json={"name": unique("book"), "scale": [0, 1, 2, 3]},
+        timeout=10,
+    )
+    assert response.status_code == 200, response.text
+
+
+# Not covered here: changing the scale of a book that has been judged, which
+# ``update_book`` refuses with 400 to match Rails'
+# ``Book#scale_cannot_be_changed_if_judgements_exist`` (labels stay editable).
+# Reaching it needs a judgement, and judgements are not writable over this API
+# at all -- they belong to Quepid's judging screen and to RunJudgeJudyJob, and
+# nothing in api/ touches the table except the cascade in delete_book. Verified
+# by hand against the stack instead: with one judgement present, PATCH with a
+# different scale answers 400 and PATCH with new labels answers 200. Same
+# reasoning as the archived = NULL note in tests/test_cases.py.

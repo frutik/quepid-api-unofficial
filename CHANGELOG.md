@@ -47,6 +47,19 @@ observe.
   owner-only — being able to see a case because someone shared it with you does
   not let you pass it on — and the `POST` is idempotent, `teams_cases` being
   keyed on `(case_id, team_id)`.
+- **`POST` and `PATCH /api/books/` take `scale` and `scale_with_labels`**, the
+  ratings a judge may give in a book and what each one means. Quepid's UI never
+  asks for these directly — creating a book there means picking a scorer, and
+  `books_controller.rb:121` copies that scorer's scale onto the book — so a book
+  created through this API had no scale at all, and
+  `JudgementHelper#generate_rating_buttons` maps over `book.scale` to build the
+  rating buttons, meaning such a book rendered none and could not be judged by
+  hand. Not to be confused with what the *LLM* judge rates against: `LlmService`
+  sends only the query and the document, and the 0–3 instruction lives in the AI
+  judge user's `system_prompt`. `PATCH` refuses to change the scale of a book
+  that has judgements, matching Rails'
+  `Book#scale_cannot_be_changed_if_judgements_exist`; labels stay editable.
+
 - **Books can be given query/doc pairs directly**, which is how a book gets
   queries at all: `Book#queries_count` is
   `query_doc_pairs.select(:query_text).distinct.count`, so a query exists in a
@@ -225,6 +238,12 @@ observe.
   run it.
 
 ### Changed
+
+- **`scale` and `scale_with_labels` change shape in every book response.**
+  `scale` was the raw varchar `"0,1,2,3"` and `scale_with_labels` the raw JSON
+  string; they are now a list of ints and an object, so a book round-trips
+  through `POST`/`PATCH` unchanged. Both were previously unwritable, so nothing
+  could have been sending them; readers of either field need updating.
 
 - **Quepid support moves to v8.4.0 – v8.5.0; v8.3.7 and older are no longer
   supported.** `quepid/models.py` has been regenerated from a v8.5.0 database
