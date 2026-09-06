@@ -8,6 +8,7 @@ from quepid.schemas import Case
 from typing import List
 from ninja.pagination import paginate
 from ninja import Schema
+from .books import _reachable_book
 from .utils import _by_pk, _team_for_new_row
 from ninja import ModelSchema
 
@@ -95,6 +96,14 @@ def create_case(request, data: CreateCase):
             if not (search_endpoint := _by_pk(qmodels.SearchEndpoints, search_endpoint_id)):
                 return 400, 'Unknown search endpoint.'
 
+        # Checked the same way and for the same reason as the search endpoint:
+        # before the write, so a bad reference cannot leave a half-built case.
+        # Reachability, not mere existence -- a case attached to a book is what
+        # PopulateBookJob writes query/doc pairs into, so accepting any book id
+        # would let a caller feed rows into a book they cannot even see.
+        if data.book_id and not _reachable_book(request.auth, data.book_id):
+            return 400, 'Unknown book, or not yours to use.'
+
         with transaction.atomic(using='quepid'):
             case = qmodels.Cases.objects.using('quepid').create(
                 case_name=data.name,
@@ -104,7 +113,12 @@ def create_case(request, data: CreateCase):
                 last_try_number=1,
                 nightly=data.nightly,
                 archived=0,
-                owner=request.auth
+                owner=request.auth,
+                # Declared on CreateCase since the schema was written, but never
+                # passed to the insert -- so a case asking for a book was created
+                # without one, silently, and the caller's next read said book_id
+                # was null with no error to explain it.
+                book_id=data.book_id,
             )
             logger.info([case, search_endpoint, team])
             qmodels.Tries.objects.using('quepid').create(
@@ -146,7 +160,11 @@ def update_case(request, id: int, data: UpdateCase):
         if data.scorer_id is not None:
             case.scorer_id = data.scorer_id
         if data.book_id is not None:
-            case.book_id = data.book_id
+            # 0 detaches the case from its book, which is what delete_book does
+            # to the cases of a book that goes away.
+            if data.book_id and not _reachable_book(request.auth, data.book_id):
+                return 400, 'Unknown book, or not yours to use.'
+            case.book_id = data.book_id or None
         if data.archived is not None:
             case.archived = data.archived
         if data.public is not None:

@@ -5,7 +5,7 @@ from ninja import Router
 from django.db import connections, transaction
 from django.utils import timezone
 import quepid.models as qmodels
-from quepid.schemas import Book, QueryDocPair
+from quepid.schemas import Book, QueryDocPair, Judgement, _as_scale
 from typing import List
 from ninja.pagination import paginate
 from ninja import Schema
@@ -62,6 +62,37 @@ class CreateQueryDocPair(Schema):
 class QueryDocPairsWritten(Schema):
     created: int
     skipped: int
+
+
+class CreateJudgement(Schema):
+    """One rater's verdict on one pair, addressed the way the pair was posted.
+
+    By ``(query_text, doc_id)`` rather than by pair id, so a caller loading a
+    labelled dataset never has to read back the ids this API assigned -- the
+    same key ``create_query_doc_pairs`` identifies a pair by.
+    """
+    query_text: str
+    doc_id: str
+    #: The rating, which must be one of the book's ``scale`` when it has one.
+    #: May be omitted only for an unrateable or judge_later verdict, matching
+    #: Rails' ``validates :rating, presence: true, unless: :rating_not_required?``.
+    rating: float = None
+    #: Why. Written by the LLM judge; free text for a human.
+    explanation: str = None
+    #: "I can't tell" -- a deliberate non-answer, not a missing one.
+    unrateable: bool = False
+    #: "Come back to this one."
+    judge_later: bool = False
+
+
+class JudgementsWritten(Schema):
+    created: int
+    updated: int
+    unchanged: int
+    #: Rows naming a (query_text, doc_id) this book does not hold. Counted
+    #: rather than raised: one stale row should not reject a batch of 500, but
+    #: a caller loading ground truth wants to know the labels went nowhere.
+    unknown: int
 
 
 def _dump_scale(scale):
@@ -375,5 +406,207 @@ def create_query_doc_pairs(request, book_id: int, data: List[CreateQueryDocPair]
                 .bulk_create(fresh, batch_size=500)
 
         return 200, {"created": len(fresh), "skipped": len(data) - len(fresh)}
+    except Exception as e:
+        return 400, str(e)
+
+
+def _judge_for_write(user, user_id):
+    """Whose judgements these are. Returns ``(user_id, error)``.
+
+    Omitted, they are the caller's own. ``user_id = 0`` writes them
+    anonymously, which Quepid supports (``judgements.user_id`` is nullable, and
+    ``Book#assign_anonymous`` exists to attribute them later) and which is the
+    honest option for labels that came out of a dataset rather than a person.
+
+    Naming anybody else is refused. Judgements are attributable opinions --
+    that is the whole reason the table is keyed on the rater -- and writing
+    them under someone else's name should require their token, not merely
+    knowing their id. To load a dataset under an identity of its own, make an
+    account for it and use its key.
+    """
+    if user_id is None:
+        return user.id, None
+    if user_id == 0:
+        return None, None
+    if user_id == user.id:
+        return user.id, None
+    return None, ('Judgements can only be written as yourself (omit user_id) or '
+                  'anonymously (user_id=0).')
+
+
+@router.get("/{book_id}/judgements/", response=List[Judgement])
+@paginate
+def view_judgements(request, book_id: int, user_id: int = None):
+    """The judgements made in a book, optionally just one rater's.
+
+    ``user_id=0`` selects the anonymous ones.
+    """
+    judgements = qmodels.Judgements.objects \
+        .using('quepid') \
+        .filter(query_doc_pair__book_id=book_id)
+
+    if user_id is not None:
+        judgements = judgements.filter(user_id=user_id or None)
+
+    return judgements.order_by('id')
+
+
+@router.post("/{book_id}/judgements/",
+             response={200: JudgementsWritten, 404: None, 400: str})
+def create_judgements(request, book_id: int, data: List[CreateJudgement],
+                      user_id: int = None):
+    """Load judgements into a book in bulk -- ground truth you already have.
+
+    Nothing else writes this table: Quepid fills it from its judging screen,
+    its bulk-judge page, or ``RunJudgeJudyJob``, all of which rate one pair at
+    a time. This is the bulk door, for a dataset that arrives already labelled.
+
+    Loading labels does **not** shut an AI judge out of the same pairs.
+    ``SelectionStrategy`` offers a rater any pair *they* have not rated that
+    has fewer than three judgements in total, so a human label and each judge's
+    verdict coexist -- which is what makes them comparable. Mind that ceiling
+    of three, though: one loaded label plus two AI judges fills a pair, and a
+    fourth rater is offered nothing.
+
+    Re-running is safe. Identity is ``(rater, pair)``, matching the table's
+    unique index, so a second post of the same rows updates the ratings rather
+    than duplicating them. The exception is anonymous judgements: MySQL treats
+    NULLs as distinct, and Rails skips its own uniqueness check when the rater
+    is nil, so this endpoint matches on the first anonymous judgement it finds
+    for a pair.
+    """
+    try:
+        book = _reachable_book(request.auth, book_id)
+        if not book:
+            return 404, None
+
+        judge_id, error = _judge_for_write(request.auth, user_id)
+        if error:
+            return 400, error
+
+        # Checked against the book's own scale, which Rails does not do -- and
+        # the reason it matters is visual rather than relational: the judging
+        # screen builds its buttons by mapping over book.scale, so a rating
+        # outside it is a row nobody can see or change by hand afterwards.
+        allowed = _as_scale(book.scale)
+        for row in data:
+            if row.rating is None:
+                if not (row.unrateable or row.judge_later):
+                    return 400, (f'{row.query_text!r}/{row.doc_id}: a judgement '
+                                 f'needs a rating unless it is unrateable or '
+                                 f'judge_later.')
+            elif allowed and row.rating not in allowed:
+                return 400, (f'{row.query_text!r}/{row.doc_id}: rating '
+                             f'{row.rating} is not on this book\'s scale '
+                             f'{allowed}.')
+
+        # Resolved by doc_id alone and matched exactly in Python: filtering on
+        # both columns would ask MySQL for every combination of the batch's
+        # query_texts and doc_ids, not the pairs actually named.
+        wanted = {(row.query_text, row.doc_id) for row in data}
+        pairs = {}
+        for pair in qmodels.QueryDocPairs.objects \
+                .using('quepid') \
+                .filter(book_id=book.id) \
+                .filter(doc_id__in={row.doc_id for row in data}) \
+                .values('id', 'query_text', 'doc_id'):
+            key = (pair['query_text'], pair['doc_id'])
+            if key in wanted:
+                pairs[key] = pair['id']
+
+        existing = {}
+        for judgement in qmodels.Judgements.objects \
+                .using('quepid') \
+                .filter(query_doc_pair_id__in=pairs.values()) \
+                .filter(user_id=judge_id):
+            existing.setdefault(judgement.query_doc_pair_id, judgement)
+
+        now = timezone.now()
+        fresh, changed, unchanged, unknown, seen = [], [], 0, 0, set()
+
+        for row in data:
+            key = (row.query_text, row.doc_id)
+            if key not in pairs:
+                unknown += 1
+                continue
+            # A batch naming the same pair twice would otherwise write two rows
+            # for one rater, which the unique index forbids.
+            if key in seen:
+                continue
+            seen.add(key)
+
+            verdict = (row.rating, row.explanation,
+                       int(row.unrateable), int(row.judge_later))
+
+            if judgement := existing.get(pairs[key]):
+                if (judgement.rating, judgement.explanation,
+                        judgement.unrateable, judgement.judge_later) == verdict:
+                    unchanged += 1
+                    continue
+                (judgement.rating, judgement.explanation,
+                 judgement.unrateable, judgement.judge_later) = verdict
+                judgement.updated_at = now
+                changed.append(judgement)
+            else:
+                fresh.append(qmodels.Judgements(
+                    query_doc_pair_id=pairs[key],
+                    user_id=judge_id,
+                    rating=row.rating,
+                    explanation=row.explanation,
+                    # Written as 0 rather than left NULL: Rails defaults both to
+                    # false, and its ``rateable`` scope is
+                    # ``where(unrateable: false).where(judge_later: false)`` --
+                    # which NULL does not satisfy, so a NULL here would quietly
+                    # drop the judgement out of every count that scope feeds.
+                    unrateable=int(row.unrateable),
+                    judge_later=int(row.judge_later),
+                    created_at=now,
+                    updated_at=now,
+                ))
+
+        with transaction.atomic(using='quepid'):
+            qmodels.Judgements.objects \
+                .using('quepid') \
+                .bulk_create(fresh, batch_size=500)
+            if changed:
+                qmodels.Judgements.objects \
+                    .using('quepid') \
+                    .bulk_update(changed,
+                                 ['rating', 'explanation', 'unrateable',
+                                  'judge_later', 'updated_at'],
+                                 batch_size=500)
+
+        return 200, {"created": len(fresh), "updated": len(changed),
+                     "unchanged": unchanged, "unknown": unknown}
+    except Exception as e:
+        return 400, str(e)
+
+
+@router.delete("/{book_id}/judgements/", response={200: dict, 404: None, 400: str})
+def delete_judgements(request, book_id: int, user_id: int = None):
+    """Clear judgements from a book, leaving its query/doc pairs in place.
+
+    Scoped to one rater with ``user_id`` (``0`` for the anonymous ones), which
+    is the useful form: it re-opens the book to that rater without discarding
+    anybody else's work. Passing no ``user_id`` clears **every** judgement in
+    the book, everyone's, which is not reversible.
+
+    Unlike ``delete_query_doc_pairs`` this keeps the pairs, so the book still
+    knows what there is to judge.
+    """
+    try:
+        book = _reachable_book(request.auth, book_id)
+        if not book:
+            return 404, None
+
+        judgements = qmodels.Judgements.objects \
+            .using('quepid') \
+            .filter(query_doc_pair__book_id=book.id)
+
+        if user_id is not None:
+            judgements = judgements.filter(user_id=user_id or None)
+
+        deleted, _ = judgements.delete()
+        return 200, {"deleted": deleted}
     except Exception as e:
         return 400, str(e)

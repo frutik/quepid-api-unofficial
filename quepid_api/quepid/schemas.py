@@ -100,6 +100,21 @@ class QueryDocPair(ModelSchema):
         return _as_dict(getattr(obj, "document_fields", None))
 
 
+class Judgement(ModelSchema):
+    """One rater's verdict on one query/doc pair.
+
+    Book-level, and not to be confused with ``Rating``: a rating hangs off a
+    *case* query and is what a scorer reads, while a judgement hangs off a
+    book's pair. Up to three judgements exist per pair, one per rater --
+    ``SelectionStrategy`` offers a rater only pairs nobody-but-them has yet to
+    rate -- so a human's label and an AI judge's sit side by side here.
+    """
+
+    class Meta:
+        model = Judgements
+        fields = "__all__"
+
+
 class Rating(ModelSchema):
     class Meta:
         model = Ratings
@@ -126,3 +141,31 @@ class Book(ModelSchema):
     @staticmethod
     def resolve_scale_with_labels(obj):
         return _as_dict(getattr(obj, "scale_with_labels", None))
+
+
+class AiJudge(ModelSchema):
+    """An LLM judge -- which is a ``users`` row, not a table of its own.
+
+    Quepid's ``User.only_ai_judges`` scope is ``where.not(llm_key: nil)`` and
+    its ``ai_judge?`` predicate is the same test, so a non-null ``llm_key`` is
+    the whole of what makes a user a judge.
+
+    The fields are listed rather than ``"__all__"`` because this is the login
+    table: ``email``, ``password``, ``administrator`` and the invitation
+    columns have no place in a judge response. ``llm_key`` is left out too --
+    it is a paid LLM credential, which Rails encrypts at rest, so this API
+    accepts it and never hands it back.
+    """
+    #: Which model to ask, and how. Rails keeps this inside the ``options``
+    #: JSON under a ``judge_options`` key rather than in a column of its own,
+    #: behind an accessor pair whose own comment reads "ugh, why isn't this
+    #: :judge_options?". Flattened here, so callers need not know that.
+    judge_options: dict
+
+    class Meta:
+        model = Users
+        fields = ['id', 'name', 'system_prompt', 'created_at', 'updated_at']
+
+    @staticmethod
+    def resolve_judge_options(obj):
+        return _as_dict(getattr(obj, "options", None)).get('judge_options', {})

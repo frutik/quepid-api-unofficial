@@ -247,3 +247,98 @@ def test_delete_unknown_case_is_404(api):
 
 def test_cases_require_authentication(live_stack):
     assert requests.get(f"{BASE_URL}/case/", timeout=10).status_code == 401
+
+
+# --- book_id ----------------------------------------------------------------
+
+
+def test_create_case_attaches_the_book(api, scorer, book):
+    """``CreateCase.book_id`` reaches the row it names.
+
+    It was declared on the schema but never passed to the insert, so a case
+    asking for a book was created without one -- 200, no error, and a `book_id`
+    of null in the very response that had just been asked for a book. The only
+    symptom was downstream: nothing linked the case to the book it was meant to
+    be rated into.
+    """
+    created = api.post(
+        f"{BASE_URL}/case/",
+        json={
+            "name": unique("case"),
+            "scorer_id": scorer["id"],
+            "book_id": book["id"],
+            "team_id": 0,
+        },
+        timeout=30,
+    )
+    assert created.status_code == 200, created.text
+    body = created.json()
+    try:
+        assert body["book_id"] == book["id"]
+        fetched = api.get(f"{BASE_URL}/case/{body['id']}/", timeout=10).json()
+        assert fetched["book_id"] == book["id"], "the link did not survive the read"
+    finally:
+        api.delete(f"{BASE_URL}/case/{body['id']}/", timeout=10)
+
+
+def test_create_case_without_a_book_leaves_it_null(case):
+    """The default stays what it was: a case need not belong to a book."""
+    assert case["book_id"] is None
+
+
+def test_create_case_with_an_unknown_book_is_400(api, scorer):
+    """Validated before the write, like search_endpoint_id, and leaving nothing."""
+    before = api.get(f"{BASE_URL}/case/", timeout=30).json()["count"]
+
+    response = api.post(
+        f"{BASE_URL}/case/",
+        json={"name": unique("case"), "scorer_id": scorer["id"], "book_id": 999999999,
+              "team_id": 0},
+        timeout=30,
+    )
+    assert response.status_code == 400
+    assert "book" in response.text.lower()
+
+    after = api.get(f"{BASE_URL}/case/", timeout=30).json()["count"]
+    assert after == before, "rejected case leaked"
+
+
+def test_a_case_cannot_be_pointed_at_a_stranger_s_book(member_api, scorer, book):
+    """Existence is not enough: it has to be a book the caller can reach.
+
+    A case attached to a book is what PopulateBookJob writes query/doc pairs
+    into, so accepting any book id would let a caller feed rows into a book they
+    cannot see -- the same reasoning as the write scoping in api/books.py.
+    """
+    own_scorer = member_api.post(
+        f"{BASE_URL}/scorers/", json={"name": unique("scorer")}, timeout=30
+    ).json()
+    response = member_api.post(
+        f"{BASE_URL}/case/",
+        json={"name": unique("case"), "scorer_id": own_scorer["id"],
+              "book_id": book["id"], "team_id": 0},
+        timeout=30,
+    )
+    member_api.delete(f"{BASE_URL}/scorers/{own_scorer['id']}/", timeout=10)
+    assert response.status_code == 400
+
+
+def test_update_case_attaches_and_detaches_a_book(api, case, book):
+    attached = api.put(
+        f"{BASE_URL}/case/{case['id']}/", json={"book_id": book["id"]}, timeout=10
+    )
+    assert attached.status_code == 200, attached.text
+    assert attached.json()["book_id"] == book["id"]
+
+    # 0 detaches, the state delete_book leaves a case in.
+    detached = api.put(f"{BASE_URL}/case/{case['id']}/", json={"book_id": 0}, timeout=10)
+    assert detached.status_code == 200, detached.text
+    assert detached.json()["book_id"] is None
+
+
+def test_update_case_with_an_unknown_book_is_400(api, case):
+    response = api.put(
+        f"{BASE_URL}/case/{case['id']}/", json={"book_id": 999999999}, timeout=10
+    )
+    assert response.status_code == 400
+    assert api.get(f"{BASE_URL}/case/{case['id']}/", timeout=10).json()["book_id"] is None

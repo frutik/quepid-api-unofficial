@@ -157,6 +157,18 @@ Consequences that are easy to get wrong:
 - **Booleans are MySQL tinyints surfaced as `IntegerField`** (`archived`,
   `public`, `nightly`, `all_rated`, `locked`). `null` is a distinct third state,
   not `false`.
+- **`users` is the login table *and* the AI judge table.** There is no judges
+  table: a judge is a `Users` row whose `llm_key` is not null, which is Quepid's
+  own definition (`User.only_ai_judges` is `where.not(llm_key: nil)`), and its
+  `judge_options` live inside the `options` JSON rather than in a column. So any
+  query that writes to `Users` is one typo away from a colleague's account —
+  `api/ai_judges.py:_judges()` exists to make that predicate the single door
+  every read and write in that router goes through, and nothing else in `api/`
+  writes to `users` at all. Two things Rails does there that Django cannot:
+  `before_save :encrypt_password` bcrypts the password (which is why this API
+  creates no human accounts), and `encrypts :llm_key` encrypts the key — though
+  `config.active_record.encryption.support_unencrypted_data` is true in Quepid's
+  `application.rb`, so a plaintext key written here reads back fine.
 
 ## Architecture
 
@@ -253,7 +265,7 @@ qmodels.Cases.objects \
 
 ## Testing
 
-`tests/` holds **190 HTTP integration tests** driving the deployed stack — nginx,
+`tests/` holds **254 HTTP integration tests** driving the deployed stack — nginx,
 gunicorn, django-ninja and a real MySQL — configured by `pytest.ini`. They never
 import Django, so there is deliberately **no `DJANGO_SETTINGS_MODULE` and no
 pytest-django**: the models are unmanaged, so pytest-django could not build a
@@ -261,7 +273,7 @@ test database for them, and mocking the ORM would hide the one class of bug
 these tests exist to catch — Rails dropping a column out from under
 `quepid/models.py`.
 
-163 cover the REST routers; **27 cover the MCP server** (`tests/test_mcp.py`,
+227 cover the REST routers; **27 cover the MCP server** (`tests/test_mcp.py`,
 over a small JSON-RPC client in `tests/mcp_client.py`). The MCP module is
 organised around the three prompts in the demo video linked from `README.md`,
 because that is what the surface is actually used for: listing cases, resolving

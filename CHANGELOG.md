@@ -38,6 +38,65 @@ observe.
 
 ### Added
 
+- **A book's judgements can be loaded in bulk**, at
+  `/api/books/{id}/judgements/` — `POST` to load, `GET` to read, `DELETE` to
+  clear (all of them, or one rater's with `?user_id=`). Nothing else writes
+  that table: Quepid fills it from its judging screen, its bulk-judge page or
+  `RunJudgeJudyJob`, all of which rate one pair at a time, so a dataset that
+  arrives already labelled had no way in. Pairs are addressed by
+  `(query_text, doc_id)`, the same key `create_query_doc_pairs` uses, so a
+  caller never has to read back the ids this API assigned; a row naming a pair
+  the book does not hold is *counted* as `unknown` rather than rejecting the
+  batch. Identity is `(rater, pair)`, matching the table's unique index, so
+  re-posting updates in place — the response is
+  `{created, updated, unchanged, unknown}`. Ratings are checked against the
+  book's `scale` when it has one, which Rails does not do: the judging screen
+  builds its buttons by mapping over the scale, so an off-scale rating is a row
+  nobody can see or change by hand afterwards. `unrateable` and `judge_later`
+  are written as `false`, never NULL, since Rails' `rateable` scope is
+  `where(unrateable: false)` and NULL would silently fall out of every count it
+  feeds. Judgements are the caller's own by default; `user_id=0` writes them
+  anonymously (`judgements.user_id` is nullable, and Quepid's `assign_anonymous`
+  can attribute them later); **naming any other user is refused** — a judgement
+  is an attributable opinion, which is why the table is keyed on the rater, and
+  writing one under someone else's name should need their token. Loading labels
+  does not shut an AI judge out of the same pairs: `SelectionStrategy` offers a
+  rater any pair *they* have not rated that has fewer than three judgements in
+  all, which is what makes a human label and a judge's verdict comparable —
+  mind that ceiling of three, though, since one loaded label plus two AI judges
+  fills a pair.
+
+- **AI judges can be created, changed and deleted through the API**, at
+  `/api/ai_judges/`, along with attaching them to books
+  (`GET`, `POST` and `DELETE` on `/api/ai_judges/{id}/books/`). Quepid has no
+  API for this at all — `AiJudgesController` is HTML-only, form posts and
+  redirects — so a judge could previously only be made by hand in the UI, and
+  a pipeline that built a book through this API still had to stop and click.
+  Worth knowing what a judge *is* before using these: **there is no judges
+  table**. A judge is a row in `users` whose `llm_key` is not null, which is
+  precisely Quepid's own definition (`User.only_ai_judges` is
+  `where.not(llm_key: nil)`), with email and password left null — validations
+  Rails skips for judges — so the account cannot be signed in to. Every query
+  in the router runs through that predicate, which is what keeps it off human
+  accounts: a login account's id answers `404` on every endpoint here, not
+  `403`. A judge must be given a team, unlike a case or a book, because a row
+  in `teams_members` is the only route anything has to one — a teamless judge
+  would be invisible the moment it was created. `system_prompt` defaults to
+  Quepid's own `DEFAULT_SYSTEM_PROMPT`, the text that asks for 0–3 ratings, and
+  `judge_options` (provider, model, service URL, timeout) is flattened out of
+  the `options` JSON where Rails keeps it. `llm_key` is **write-only** — it is
+  a paid LLM credential, which Rails encrypts at rest — so it is accepted on
+  create and update and never returned. `DELETE` is a real delete, not the
+  archiving `DELETE /api/case/{id}/` does, but it refuses with `400` for a
+  judge that has already rated something, matching Rails' `has_many
+  :judgements, dependent: :restrict_with_error`: nothing in MySQL protects
+  those rows, `judgements.user_id` carrying no foreign key, so the alternative
+  is silently orphaning every rating the judge produced. Attaching to a book is
+  a separate act from team membership and is what makes a judge selectable at
+  all — Quepid's "Run Judge Judy" reads `@book.ai_judges`, the
+  `books_ai_judges` join. **Running** a judge still has no API on either side:
+  `run_judge_judy` is an HTML route that enqueues a background job.
+
 - **Cases can now be attached to teams through the API.** `POST /api/case/`
   takes an optional `team_id`, and `GET`, `POST` and `DELETE` on
   `/api/teams/{id}/cases/` list, share and unshare a case for a team. Nothing
@@ -300,6 +359,17 @@ observe.
   describe `scale` / `scale_with_labels` instead.
 
 ### Fixed
+
+- **`POST /api/case/` silently dropped `book_id`.** `CreateCase` had declared
+  the field since the schema was written, but the insert never passed it, so a
+  case asking to be attached to a book was created without one — no error, and
+  the caller's next read simply said `book_id` was null. It is now written, and
+  validated first: an unknown book, or one the caller cannot reach, answers
+  `400` rather than being ignored. `PUT /api/case/{id}/` gained the same field
+  on the same terms, with `book_id: 0` detaching a case from its book. The
+  check is reachability, not mere existence — a case attached to a book is what
+  `PopulateBookJob` writes query/doc pairs into, so accepting any id would let
+  a caller feed rows into a book they cannot see.
 
 - **`DELETE /api/books/{id}` could not delete a book anything referenced.**
   `query_doc_pairs.book_id`, `book_metadata.book_id` and

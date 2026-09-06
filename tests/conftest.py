@@ -10,8 +10,8 @@ to return, including columns the database dropped years ago.
 .. warning::
 
    **These tests write to a real Quepid database.** They create teams, scorers,
-   search endpoints, cases, queries, ratings and books, and delete them again on
-   teardown. Point them at a throwaway Compose stack, never at anything whose
+   search endpoints, cases, queries, ratings, books and AI judges -- the last of
+   which are rows in ``users`` -- and delete them again on teardown. Point them at a throwaway Compose stack, never at anything whose
    data you care about. Teardown is best-effort: a crashed run leaves rows
    behind.
 
@@ -329,6 +329,31 @@ def book(api, book_payload):
     row = _create(api, f"{BASE_URL}/books/", book_payload)
     yield row
     _discard(api, f"{BASE_URL}/books/{row['id']}")
+
+
+@pytest.fixture
+def ai_judge(api, team):
+    """An AI judge, on a throwaway team of its own.
+
+    The team is not incidental. A judge has no owner column, so a row in
+    ``teams_members`` is the only route anything has to it -- ``create_ai_judge``
+    refuses to make one that would be unreachable -- and the fixture therefore
+    has to own a team as well.
+
+    The key is fictitious on purpose: no router in this API dereferences it, and
+    the LLM is only ever called by Quepid's own ``RunJudgeJudyJob``.
+    """
+    row = _create(
+        api,
+        f"{BASE_URL}/ai_judges/",
+        {
+            "name": unique("judge"),
+            "llm_key": "sk-not-a-real-key",
+            "team_id": team["id"],
+        },
+    )
+    yield row
+    _discard(api, f"{BASE_URL}/ai_judges/{row['id']}/")
 
 
 @pytest.fixture(scope="session")

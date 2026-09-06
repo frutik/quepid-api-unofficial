@@ -11,6 +11,7 @@ from api.cases import router as cases_router
 from api.queries import router as queries_router
 from api.books import router as books_router
 from api.ratings import router as ratings_router
+from api.ai_judges import router as ai_judges_router
 # from api.toolbox import router as toolbox_router
 
 api = NinjaAPI(
@@ -26,6 +27,7 @@ api.add_router("/case", cases_router)
 api.add_router("/query", queries_router)
 api.add_router("/rating", ratings_router)
 api.add_router("/books", books_router)
+api.add_router("/ai_judges", ai_judges_router)
 # api.add_router("/toolbox", toolbox_router)
 
 

@@ -278,7 +278,8 @@ The tests drive the API over HTTP, so they need the stack from
 "Run locally" above already running. They never import Django.
 
 > ⚠️ **They write to whatever database you point them at** — creating and
-> deleting teams, scorers, search endpoints, cases, queries, ratings and books.
+> deleting teams, scorers, search endpoints, cases, queries, ratings, books
+> and AI judges.
 > Use a throwaway stack, never a Quepid whose data you care about.
 
 `docker-compose.yml` pins published image tags alongside `build:`, so build
