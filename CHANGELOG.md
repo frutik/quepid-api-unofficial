@@ -310,7 +310,12 @@ observe.
   It now clears those rows first, and the judgements hanging off the pairs,
   which is what Rails' `Book#really_destroy` exists to do. Dangling
   `teams_books` rows go too, by raw SQL, no constraint being there to catch
-  them.
+  them — and likewise `cases.book_id`, which is nulled rather than left
+  pointing at a book that no longer exists (Rails:
+  `has_many :cases, dependent: :nullify`), and the polymorphic
+  `active_storage_attachments` rows that `Book#delete_attachments` purges. The
+  case itself survives its book: a case is a search configuration, and outlives
+  whatever it was being rated against.
 
 - **A team created through the API was invisible to everyone, including its
   creator.** Quepid dropped the owner column from `teams`, so a team is reachable

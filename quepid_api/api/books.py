@@ -271,6 +271,25 @@ def delete_book(request, book_id: int):
             qmodels.BookMetadata.objects.using('quepid').filter(book_id=book.id).delete()
             qmodels.BooksAiJudges.objects.using('quepid').filter(book_id=book.id).delete()
 
+            # cases.book_id carries no foreign key, so nothing would stop the
+            # book going and leaving a case pointing at an id that no longer
+            # resolves. Rails says `has_many :cases, dependent: :nullify`; this
+            # is that. The case itself stays -- it is a search configuration and
+            # outlives the book it was rating against.
+            qmodels.Cases.objects \
+                .using('quepid') \
+                .filter(book_id=book.id) \
+                .update(book_id=None, updated_at=timezone.now())
+
+            # Attachments are polymorphic and so have no foreign key either --
+            # Book#delete_attachments purges these on destroy. The blobs behind
+            # them are left alone: they are shared, and Rails purges them on its
+            # own schedule.
+            qmodels.ActiveStorageAttachments.objects \
+                .using('quepid') \
+                .filter(record_type='Book', record_id=book.id) \
+                .delete()
+
             # teams_books carries no primary key, so the ORM cannot delete from
             # it at all -- see teams.py:_shared_book_ids. It carries no foreign
             # key either, so the row would otherwise be left dangling.

@@ -259,3 +259,22 @@ def test_query_doc_pairs_require_authentication(live_stack, book):
     url = f"{BASE_URL}/books/{book['id']}/query_doc_pairs/"
     assert requests.get(url, timeout=10).status_code == 401
     assert requests.post(url, json=[], timeout=10).status_code == 401
+
+
+def test_deleting_a_book_releases_its_cases(api, book_payload, case):
+    """``cases.book_id`` has no foreign key, so nothing would catch a dangling one.
+
+    Rails declares ``has_many :cases, dependent: :nullify`` -- the case survives
+    its book, because a case is a search configuration and outlives whatever it
+    was being rated against. Without the same behaviour here, deleting a book
+    left every case that used it pointing at an id that no longer resolves, with
+    no constraint to complain.
+    """
+    book = api.post(f"{BASE_URL}/books/", json=book_payload, timeout=30).json()
+    api.put(f"{BASE_URL}/case/{case['id']}/", json={"book_id": book["id"]}, timeout=10)
+
+    api.delete(f"{BASE_URL}/books/{book['id']}", timeout=30)
+
+    released = api.get(f"{BASE_URL}/case/{case['id']}/", timeout=10)
+    assert released.status_code == 200, "the case must survive its book"
+    assert released.json()["book_id"] is None
