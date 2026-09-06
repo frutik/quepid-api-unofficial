@@ -1,15 +1,16 @@
+import json
 import logging
 
 from ninja import Router
-from django.db import transaction
+from django.db import connections, transaction
 from django.utils import timezone
 import quepid.models as qmodels
-from quepid.schemas import Book
+from quepid.schemas import Book, QueryDocPair
 from typing import List
 from ninja.pagination import paginate
 from ninja import Schema
 
-from .utils import _by_pk, _team_for_new_row
+from .utils import _by_pk, _member_teams, _team_for_new_row
 
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,47 @@ class UpdateBook(Schema):
     support_implicit_judgements: bool = None
     show_rank: bool = None
     description: str = None
+
+
+class CreateQueryDocPair(Schema):
+    """One pair to put in a book. Posted in batches -- see create_query_doc_pairs."""
+    query_text: str
+    doc_id: str
+    position: int = None
+    #: The document itself, as Quepid should display it while judging. Written
+    #: to the TEXT column ``document_fields`` as JSON, the way PopulateBookJob
+    #: does with ``pair[:document_fields].to_json``.
+    document_fields: dict = None
+    information_need: str = None
+    notes: str = None
+    query_options: dict = None
+
+
+class QueryDocPairsWritten(Schema):
+    created: int
+    skipped: int
+
+
+def _reachable_book(user, book_id):
+    """A book the caller may write to: their own, or one shared with their team.
+
+    Mirrors Quepid's own ``Book.for_user`` -- ownership or a teams_books row
+    reached through a team you are in. Reads elsewhere in this router are still
+    unscoped; writes are not, because adding query/doc pairs to a stranger's
+    book changes what their judges are asked to rate.
+    """
+    book = qmodels.Books.objects.using('quepid').filter(pk=book_id).first()
+    if not book:
+        return None
+    if book.owner_id == user.id:
+        return book
+
+    shared_with_me = qmodels.TeamsBooks.objects \
+        .using('quepid') \
+        .filter(book_id=book.id) \
+        .filter(team_id__in=_member_teams(user).values('id')) \
+        .exists()
+    return book if shared_with_me else None
 
 
 @router.get("/", response=List[Book])
@@ -111,14 +153,154 @@ def update_book(request, book_id: int, data: UpdateBook):
         return 400, str(e)
         
         
+def _clear_query_doc_pairs(book):
+    """Empty a book of its pairs, judgements first. Returns how many pairs went.
+
+    ``judgements.query_doc_pair_id`` is a real foreign key and ``inspectdb``
+    reflects every relation as ``DO_NOTHING``, so Django emits no cascade and
+    MySQL answers 1451. Rails hits the same wall -- ``Book#really_destroy``
+    exists for exactly this reason and deletes the judgements by hand first.
+    This is that method, in Django.
+    """
+    with transaction.atomic(using='quepid'):
+        qmodels.Judgements.objects \
+            .using('quepid') \
+            .filter(query_doc_pair__book_id=book.id) \
+            .delete()
+        removed, _ = qmodels.QueryDocPairs.objects \
+            .using('quepid') \
+            .filter(book_id=book.id) \
+            .delete()
+
+    return removed
+
+
+@router.delete("/{book_id}/query_doc_pairs/",
+               response={200: dict, 404: None, 400: str})
+def delete_query_doc_pairs(request, book_id: int):
+    """Empty a book of its query/doc pairs, and of the judgements on them.
+
+    This is how to re-import a book whose documents have changed:
+    ``create_query_doc_pairs`` skips a pair the book already holds rather than
+    updating it, so changed document_fields need the old pair gone first.
+
+    Destructive on purpose, and not reversible -- every judgement anyone has
+    made in this book goes with the pairs, because a judgement hangs off a pair.
+    """
+    try:
+        book = _reachable_book(request.auth, book_id)
+        if not book:
+            return 404, None
+        return 200, {"deleted": _clear_query_doc_pairs(book)}
+    except Exception as e:
+        return 400, str(e)
+
+
 @router.delete("/{book_id}", response={200: dict, 404: None, 400: str})
 def delete_book(request, book_id: int):
+    """Delete a book outright, along with everything that hangs off it.
+
+    Unlike ``delete_case``, which only archives, this really removes the row --
+    and so has to clear what references it first. ``book.delete()`` on its own
+    works only for a book nothing has touched: one query/doc pair, or a book
+    somebody has merely *viewed* (which writes book_metadata), is enough for
+    MySQL to refuse with 1451. Rails gets that cascade from ``dependent:``
+    declarations, which are model-level and invisible to the reflection.
+    """
     try:
         book = qmodels.Books.objects.using('quepid').filter(id=book_id).first()
         if not book:
             return 404, None
-        
-        book.delete()
+
+        with transaction.atomic(using='quepid'):
+            _clear_query_doc_pairs(book)
+            qmodels.BookMetadata.objects.using('quepid').filter(book_id=book.id).delete()
+            qmodels.BooksAiJudges.objects.using('quepid').filter(book_id=book.id).delete()
+
+            # teams_books carries no primary key, so the ORM cannot delete from
+            # it at all -- see teams.py:_shared_book_ids. It carries no foreign
+            # key either, so the row would otherwise be left dangling.
+            with connections['quepid'].cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM teams_books WHERE book_id = %s", [book.id]
+                )
+
+            book.delete()
         return 200, {"message": "Book deleted successfully"}
     except Exception as e:
-        return 400, str(e) 
+        return 400, str(e)
+
+
+@router.get("/{book_id}/query_doc_pairs/", response=List[QueryDocPair])
+@paginate
+def view_query_doc_pairs(request, book_id: int):
+    """The book's query/doc pairs -- its queries, one row per document"""
+    return qmodels.QueryDocPairs.objects \
+        .using('quepid') \
+        .filter(book_id=book_id) \
+        .order_by('id')
+
+
+@router.post("/{book_id}/query_doc_pairs/",
+             response={200: QueryDocPairsWritten, 404: None, 400: str})
+def create_query_doc_pairs(request, book_id: int, data: List[CreateQueryDocPair]):
+    """Add query/doc pairs to a book in bulk, which is how a book gets queries.
+
+    Quepid normally fills a book from a case run, via PopulateBookJob. This is
+    the other direction: loading pairs you already have -- a labelled dataset,
+    say -- so the book holds ground truth rather than one engine's results.
+
+    Identity is ``(query_text, doc_id)``, matching the ``find_or_create_by`` that
+    PopulateBookJob uses, so a pair the book already holds is skipped rather
+    than duplicated and re-posting a batch is a no-op. Skipped pairs are not
+    updated: to change a pair's document_fields, delete it and post it again.
+
+    Takes a JSON array, because a dataset is tens of thousands of pairs and one
+    request each would be unusable. Batch on the client to keep bodies sane.
+    """
+    try:
+        book = _reachable_book(request.auth, book_id)
+        if not book:
+            return 404, None
+
+        now = timezone.now()
+
+        existing = set(
+            qmodels.QueryDocPairs.objects
+            .using('quepid')
+            .filter(book_id=book.id)
+            .values_list('query_text', 'doc_id')
+        )
+
+        fresh, seen = [], set()
+        for pair in data:
+            # `seen` catches duplicates within the batch itself, which `existing`
+            # cannot: nothing is written until the bulk_create below.
+            key = (pair.query_text, pair.doc_id)
+            if key in existing or key in seen:
+                continue
+            seen.add(key)
+            fresh.append(qmodels.QueryDocPairs(
+                book_id=book.id,
+                query_text=pair.query_text,
+                doc_id=pair.doc_id,
+                position=pair.position,
+                # TEXT, not json, unlike options just below -- Rails dumps it on
+                # the way in, so passing the dict itself would store its repr.
+                document_fields=(json.dumps(pair.document_fields)
+                                 if pair.document_fields else None),
+                information_need=pair.information_need,
+                notes=pair.notes,
+                options=pair.query_options or None,
+                created_at=now,
+                updated_at=now,
+            ))
+
+        with transaction.atomic(using='quepid'):
+            qmodels.QueryDocPairs.objects \
+                .using('quepid') \
+                .bulk_create(fresh, batch_size=500)
+
+        return 200, {"created": len(fresh), "skipped": len(data) - len(fresh)}
+    except Exception as e:
+        return 400, str(e)

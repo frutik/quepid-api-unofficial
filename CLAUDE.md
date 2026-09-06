@@ -253,7 +253,7 @@ qmodels.Cases.objects \
 
 ## Testing
 
-`tests/` holds **147 HTTP integration tests** driving the deployed stack — nginx,
+`tests/` holds **182 HTTP integration tests** driving the deployed stack — nginx,
 gunicorn, django-ninja and a real MySQL — configured by `pytest.ini`. They never
 import Django, so there is deliberately **no `DJANGO_SETTINGS_MODULE` and no
 pytest-django**: the models are unmanaged, so pytest-django could not build a
@@ -261,7 +261,7 @@ test database for them, and mocking the ORM would hide the one class of bug
 these tests exist to catch — Rails dropping a column out from under
 `quepid/models.py`.
 
-120 cover the REST routers; **27 cover the MCP server** (`tests/test_mcp.py`,
+155 cover the REST routers; **27 cover the MCP server** (`tests/test_mcp.py`,
 over a small JSON-RPC client in `tests/mcp_client.py`). The MCP module is
 organised around the three prompts in the demo video linked from `README.md`,
 because that is what the surface is actually used for: listing cases, resolving

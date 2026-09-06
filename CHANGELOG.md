@@ -47,6 +47,23 @@ observe.
   owner-only — being able to see a case because someone shared it with you does
   not let you pass it on — and the `POST` is idempotent, `teams_cases` being
   keyed on `(case_id, team_id)`.
+- **Books can be given query/doc pairs directly**, which is how a book gets
+  queries at all: `Book#queries_count` is
+  `query_doc_pairs.select(:query_text).distinct.count`, so a query exists in a
+  book only attached to a document, and `doc_id` is mandatory Rails-side.
+  `GET`, `POST` and `DELETE` on `/api/books/{id}/query_doc_pairs/` read, load
+  and clear them. Quepid fills a book from a case run (`PopulateBookJob`); this
+  is the other direction — loading pairs you already have, so a book can hold
+  ground truth rather than one engine's results. `POST` takes a **JSON array**,
+  because a dataset is tens of thousands of pairs; identity is
+  `(query_text, doc_id)`, matching the `find_or_create_by` that job uses, so a
+  pair the book already holds is skipped rather than duplicated and a re-run is
+  a no-op. Skipped pairs are *not* updated — `DELETE` the book's pairs to
+  re-import changed documents, which also removes every judgement on them.
+  Note `document_fields` is a TEXT column holding JSON, not a json column like
+  `options` on the same row, so it is dumped on the way in and parsed on the way
+  out. Writes are owner-or-team, unlike the reads elsewhere in this router.
+
 - **Books get the same team treatment as cases.** `POST /api/books/` takes the
   same optional `team_id` and resolves it the same way, and `GET`, `POST` and
   `DELETE` on `/api/teams/{id}/books/` list, share and unshare a book. A book
@@ -264,6 +281,17 @@ observe.
   describe `scale` / `scale_with_labels` instead.
 
 ### Fixed
+
+- **`DELETE /api/books/{id}` could not delete a book anything referenced.**
+  `query_doc_pairs.book_id`, `book_metadata.book_id` and
+  `books_ai_judges.book_id` are all real foreign keys, and `inspectdb` reflects
+  every relation as `DO_NOTHING`, so Django emitted no cascade and MySQL
+  answered 1451 — a single query/doc pair, or a book somebody had merely
+  *viewed*, was enough to make a book permanently undeletable through this API.
+  It now clears those rows first, and the judgements hanging off the pairs,
+  which is what Rails' `Book#really_destroy` exists to do. Dangling
+  `teams_books` rows go too, by raw SQL, no constraint being there to catch
+  them.
 
 - **A team created through the API was invisible to everyone, including its
   creator.** Quepid dropped the owner column from `teams`, so a team is reachable
