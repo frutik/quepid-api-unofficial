@@ -1,5 +1,6 @@
 import logging
 from ninja import Router
+from django.db import transaction
 from django.utils import timezone
 import quepid.models as qmodels
 from quepid.schemas import Team
@@ -38,14 +39,23 @@ def view_team(request, id: int):
     
 @router.post("/", response={200: Team, 400: str})
 def create_team(request, data: CreateTeam):
-    """Create a new team"""
+    """Create a new team, with the calling user as its first member"""
     try:
         now = timezone.now()
-        return qmodels.Teams.objects.using('quepid').create(
-            name=data.name,
-            created_at=now,
-            updated_at=now
-        )
+        with transaction.atomic(using='quepid'):
+            team = qmodels.Teams.objects.using('quepid').create(
+                name=data.name,
+                created_at=now,
+                updated_at=now
+            )
+            # Quepid has no owner column on teams -- a team is reachable only
+            # through teams_members. Without this row the team exists but is
+            # invisible to everyone, including in the UI's Share case dialog.
+            qmodels.TeamsMembers.objects.using('quepid').create(
+                member=request.auth,
+                team=team
+            )
+        return team
     except Exception as e:
         return 400, str(e)
         
@@ -73,5 +83,10 @@ def delete_team(request, id: int):
     if not team:
         return 404, None
 
-    team.delete(using='quepid')
+    # teams_members, teams_cases and teams_scorers hold FKs onto teams, and the
+    # reflected models use DO_NOTHING, so Django will not cascade for us.
+    with transaction.atomic(using='quepid'):
+        for join in (qmodels.TeamsMembers, qmodels.TeamsCases, qmodels.TeamsScorers):
+            join.objects.using('quepid').filter(team_id=team.id).delete()
+        team.delete(using='quepid')
     return 204, None
