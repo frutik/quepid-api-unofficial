@@ -49,7 +49,11 @@ def test_create_case_honours_nightly(api, scorer):
     """
     created = api.post(
         f"{BASE_URL}/case/",
-        json={"name": unique("case"), "scorer_id": scorer["id"]},
+        json={
+            "name": unique("case"),
+            "scorer_id": scorer["id"],
+            "team_id": 0,   # unshared: see the `case` fixture in conftest
+        },
         timeout=30,
     )
     assert created.status_code == 200, created.text
@@ -61,14 +65,19 @@ def test_create_case_honours_nightly(api, scorer):
 
 
 def test_create_case_with_unknown_search_endpoint_is_400(api, scorer):
-    """Rejects the request -- but the case row is already committed.
+    """Rejects the request, and leaves nothing behind.
 
-    ``create_case`` writes the ``Cases`` row first and only then resolves
-    ``search_endpoint_id``, so this error path leaves an orphaned case behind
-    with no try attached. This test asserts the status code it documents the
-    leak; it deliberately does not assert on the orphan, but be aware that each
-    run of this test adds one stray row to the database.
+    ``create_case`` used to write the ``Cases`` row first and resolve
+    ``search_endpoint_id`` only afterwards, so this error path returned 400
+    having already committed an orphaned case with no try attached -- one stray
+    row per run of this test. It now validates before it writes and wraps the
+    case, its try and any team association in one transaction, so the second
+    assertion here is the one that matters.
     """
+    # The total, not the first page: the listing is paginated, so a leaked case
+    # could sit on a later page and a name check would miss it.
+    before = api.get(f"{BASE_URL}/case/", timeout=30).json()["count"]
+
     response = api.post(
         f"{BASE_URL}/case/",
         json={
@@ -80,6 +89,9 @@ def test_create_case_with_unknown_search_endpoint_is_400(api, scorer):
     )
     assert response.status_code == 400
     assert "Unknown search endpoint" in response.text
+
+    after = api.get(f"{BASE_URL}/case/", timeout=30).json()["count"]
+    assert after == before, "rejected case leaked"
 
 
 def test_get_case(api, case):

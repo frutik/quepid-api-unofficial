@@ -18,6 +18,8 @@ router = Router(tags=["Cases management"])
 
 class CreateCase(Schema):
     name: str
+    #: The team to share the new case with. Omitted, it is resolved from the
+    #: caller's memberships (see ``_team_for_new_case``); 0 means "no team".
     team_id: int = None
     scorer_id: int = 5
     nightly: int = 1
@@ -87,8 +89,16 @@ def _team_for_new_case(user, team_id):
     unshared case, which is what Quepid does by default anyway. A caller in
     several is asked to say which, because guessing would silently expose the
     case to the wrong people.
+
+    ``team_id = 0`` means "no team, deliberately". Without it, automatic
+    association would leave a caller who belongs to a team no way to create an
+    unshared case at all, which is a capability Quepid itself has: every case
+    starts unshared until somebody shares it.
     """
     teams = _member_teams(user)
+
+    if team_id == 0:
+        return None, None
 
     if team_id is not None:
         team = teams.filter(pk=team_id).first()

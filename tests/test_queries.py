@@ -143,7 +143,12 @@ def test_list_queries_is_scoped_to_the_case(api, case, query, scorer):
     """view_queries filters on case_id, so another case sees none of these."""
     other = api.post(
         f"{BASE_URL}/case/",
-        json={"name": unique("case-other"), "scorer_id": scorer["id"], "nightly": 0},
+        json={
+            "name": unique("case-other"),
+            "scorer_id": scorer["id"],
+            "nightly": 0,
+            "team_id": 0,   # unshared: see the `case` fixture in conftest
+        },
         timeout=30,
     )
     assert other.status_code == 200, other.text

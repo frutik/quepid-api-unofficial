@@ -102,14 +102,16 @@ def share_case_with_team(request, id: int, data: ShareCase):
     # shared it with you is not a licence to hand it to further teams.
     case = qmodels.Cases.objects \
         .using('quepid') \
-        .filter(pk=data.case_id, owner_id=request.auth.id) \
+        .filter(pk=data.case_id) \
+        .filter(owner_id=request.auth.id) \
         .first()
     if not case:
         return 400, 'Unknown case, or not owned by you.'
 
     already_shared = qmodels.TeamsCases.objects \
         .using('quepid') \
-        .filter(team_id=team.id, case_id=case.id) \
+        .filter(team_id=team.id) \
+        .filter(case_id=case.id) \
         .exists()
     if not already_shared:
         qmodels.TeamsCases.objects.using('quepid').create(team=team, case=case)
@@ -125,7 +127,8 @@ def unshare_case_from_team(request, id: int, case_id: int):
 
     deleted, _ = qmodels.TeamsCases.objects \
         .using('quepid') \
-        .filter(team_id=team.id, case_id=case_id) \
+        .filter(team_id=team.id) \
+        .filter(case_id=case_id) \
         .delete()
     return (204, None) if deleted else (404, None)
 

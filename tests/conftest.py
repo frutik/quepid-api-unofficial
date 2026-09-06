@@ -134,6 +134,44 @@ def api(live_stack):
     session.close()
 
 
+@pytest.fixture(scope="session")
+def member_api(live_stack):
+    """An API session for a **second, non-administrator** user.
+
+    Needed by anything that asserts one user cannot see another's rows: made
+    with ``api`` alone, a scoping assertion passes whether or not scoping works,
+    because the only user in play owns everything.
+
+    It also gives the team-resolution tests in ``test_teams_cases.py`` a caller
+    whose team count they control outright. The bootstrap account has whatever
+    teams its owner has made by hand, and ``create_case`` behaves differently at
+    zero, one and several -- so those tests cannot be written against it.
+
+    Mint one against a second Quepid account::
+
+        docker compose exec -T quepid-api-quepid \\
+            bundle exec thor user:add_api_key member@example.com
+        export QUEPID_MEMBER_API_TOKEN=<the key it prints>
+    """
+    token = os.getenv("QUEPID_MEMBER_API_TOKEN")
+    if not token:
+        pytest.skip(
+            "QUEPID_MEMBER_API_TOKEN is unset; row scoping cannot be tested "
+            "with a single user"
+        )
+
+    session = requests.Session()
+    session.headers["Authorization"] = f"Bearer {token}"
+
+    probe = session.get(f"{BASE_URL}/scorers/", timeout=10)
+    if probe.status_code == 401:
+        pytest.fail(f"QUEPID_MEMBER_API_TOKEN rejected by {BASE_URL}")
+    probe.raise_for_status()
+
+    yield session
+    session.close()
+
+
 def _discard(api, url):
     """Best-effort teardown. A failed delete must not mask a test failure.
 
@@ -230,6 +268,10 @@ def case(api, scorer, search_endpoint):
             "scorer_id": scorer["id"],
             "search_endpoint_id": search_endpoint["id"],
             "nightly": 0,
+            # Explicitly team-less. Without this the case is shared with the
+            # token owner's team whenever they have exactly one, so a suite run
+            # fills a real team with a hundred archived test cases.
+            "team_id": 0,
         },
     )
     yield row

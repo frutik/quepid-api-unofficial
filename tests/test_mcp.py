@@ -62,6 +62,7 @@ def demo(api, request):
         "search_endpoint_id": endpoint["id"],
         "search_query": QUERY_DSL,
         "nightly": 0,
+        "team_id": 0,   # unshared: see the `case` fixture in conftest
     })
     queries = [
         _create(api, f"{BASE_URL}/query/{case['id']}/", {

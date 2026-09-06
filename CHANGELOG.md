@@ -38,6 +38,25 @@ observe.
 
 ### Added
 
+- **Cases can now be attached to teams through the API.** `POST /api/case/`
+  takes an optional `team_id`, and `GET`, `POST` and `DELETE` on
+  `/api/teams/{id}/cases/` list, share and unshare a case for a team. Nothing
+  here ever wrote `teams_cases` before, so a team and a case both created
+  through this API stayed unconnected: Quepid showed an empty "Associated
+  Teams" column and the case never appeared under "Shared With Me". Sharing is
+  owner-only — being able to see a case because someone shared it with you does
+  not let you pass it on — and the `POST` is idempotent, `teams_cases` being
+  keyed on `(case_id, team_id)`.
+- **`POST /api/case/` picks the team for you when there is no ambiguity.** A
+  caller who belongs to exactly one team gets the case shared with it without
+  passing `team_id`; a caller in none gets an unshared case, as before. A caller
+  in several gets `400` naming their teams, rather than having one guessed —
+  **if you belong to more than one team, `POST /api/case/` now requires
+  `team_id`**, which is the one change here an existing caller can trip over.
+  Pass `team_id: 0` for a deliberately unshared case: automatic association
+  would otherwise leave anyone who belongs to a team unable to create one, and
+  every case in Quepid starts unshared.
+
 - **`quepid_datasets` is now also installable on its own**, as the
   `quepid-datasets` package (`quepid_api/quepid_datasets/pyproject.toml`),
   separate from `quepid-models`. It has nothing to do with the Rails schema or
@@ -214,6 +233,19 @@ observe.
   publishes the field as `user` accordingly (was `user_id`); anything that read
   `judgement.user_id` still works via Django's automatic `_id` attribute.
 
+### Security
+
+- **The `/api/teams` endpoints are now scoped to the calling user.** `GET
+  /api/teams/` returned every team on the instance regardless of who asked, and
+  `GET`, `PUT` and `DELETE /api/teams/{id}/` resolved a team by bare primary key
+  — so any authenticated user could read, rename or delete any other user's
+  team. All four now resolve access through `teams_members`, the same rule the
+  MCP server already applied. Teams the caller is not in answer `404` rather than
+  `403`, so the API does not confirm they exist. Note this is a **behaviour
+  change for single-user scripts that relied on `GET /api/teams/` returning
+  everything**. The other REST routers are still unscoped (`api/cases.py`'s
+  `# @todo check rights?`); only teams have been done.
+
 ### Removed
 
 - **The MCP `selectionstrategies` collection**, leaving 13. The table no longer
@@ -222,6 +254,20 @@ observe.
   describe `scale` / `scale_with_labels` instead.
 
 ### Fixed
+
+- **A team created through the API was invisible to everyone, including its
+  creator.** Quepid dropped the owner column from `teams`, so a team is reachable
+  only through a `teams_members` row, and `POST /api/teams/` wrote the team
+  without one. The team existed, held cases, and appeared nowhere: the UI's Share
+  case dialog reported "No teams to share with". It now enrols the creator, in a
+  transaction, so a team cannot be created memberless. **Teams created by earlier
+  versions are still orphaned** — insert the missing `teams_members` row by hand,
+  or recreate them.
+- **`create_case` left an orphaned case behind when it rejected the request.**
+  It wrote the `Cases` row first and resolved `search_endpoint_id` afterwards, so
+  a bad id returned `400` having already committed a case with no try attached.
+  It validates before writing now, and the case, its try and any team
+  association go in one transaction.
 
 - **`query_options` was double-encoded on write.** `queries.options` became a
   MySQL `json` column in Quepid v8.2.0 and now reflects as a `JSONField`, so

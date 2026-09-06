@@ -189,7 +189,8 @@ gunicorn → Django → django-ninja.
   the only reason `quepid_mcp` is in `INSTALLED_APPS`. `auth.py` holds the DRF
   adapter; `instructions.py` holds the server-level prompt that `settings.py`
   imports. Read-only, and every toolset scopes rows to the token owner and their
-  teams — unlike the ninja routers, which do no scoping at all.
+  teams — as do the `/teams` ninja routes; the other ninja routers still do
+  no scoping at all.
 - `quepid_api/quepid_datasets/` — the `create_case`, `load_dataset` and
   `list_cases` commands, the dataset definitions they read and the API client
   they share. **Not a third API surface and not an ORM writer**: it is a *client*
@@ -212,9 +213,16 @@ The authenticated `Users` instance arrives as **`request.auth`**, not
 `request.user` (`request.user` is Django's anonymous user and is meaningless
 here). It is used directly as an owner FK — e.g. `owner=request.auth`.
 
-There is **no authorization layer**: any valid token can read and write every
-case, book and team. `api/cases.py:51` marks this (`# @todo check rights?`).
-Do not assume row scoping exists; if you add an endpoint, it inherits this.
+There is **almost no authorization layer**: any valid token can read and write
+every case and book. `api/cases.py` marks this (`# @todo check rights?`). Do not
+assume row scoping exists; if you add an endpoint, it inherits this.
+
+**`/teams` is the exception.** All four team routes, and the
+`/teams/{id}/cases/` routes, resolve access through `api/utils.py:_member_teams`
+— membership in `teams_members`, the same rule `quepid_mcp` applies. A team the
+caller is not in answers `404`, not `403`. `create_case` uses the same helper to
+decide which team a new case joins. Scoping a further resource means giving it
+an equivalent helper, not extending this one.
 
 ## Naming apps
 
@@ -245,7 +253,7 @@ qmodels.Cases.objects \
 
 ## Testing
 
-`tests/` holds **124 HTTP integration tests** driving the deployed stack — nginx,
+`tests/` holds **147 HTTP integration tests** driving the deployed stack — nginx,
 gunicorn, django-ninja and a real MySQL — configured by `pytest.ini`. They never
 import Django, so there is deliberately **no `DJANGO_SETTINGS_MODULE` and no
 pytest-django**: the models are unmanaged, so pytest-django could not build a
@@ -253,7 +261,7 @@ test database for them, and mocking the ORM would hide the one class of bug
 these tests exist to catch — Rails dropping a column out from under
 `quepid/models.py`.
 
-97 cover the REST routers; **27 cover the MCP server** (`tests/test_mcp.py`,
+120 cover the REST routers; **27 cover the MCP server** (`tests/test_mcp.py`,
 over a small JSON-RPC client in `tests/mcp_client.py`). The MCP module is
 organised around the three prompts in the demo video linked from `README.md`,
 because that is what the surface is actually used for: listing cases, resolving
@@ -277,6 +285,10 @@ Two things to know before running them:
   it. `quepid_mcp/mcp.py:119` returns the unscoped queryset for admins, so the
   three MCP scoping tests would pass vacuously with the bootstrap admin token.
   They skip when it is unset rather than assert something meaningless.
+  `tests/test_teams_cases.py` needs it for a second reason that applies to
+  admins too: `create_case` behaves differently at zero, one and several teams,
+  so those tests need a caller whose team count they control, which the
+  bootstrap account (with whatever teams its owner made by hand) is not.
 - **The app image bakes the code in** — there is no volume mount, so
   `docker compose build quepid-api-app && docker compose up -d quepid-api-app`
   is required before your changes are what the suite is testing. Editing a file
