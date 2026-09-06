@@ -1,6 +1,7 @@
 import logging
 
 from ninja import Router
+from django.db import transaction
 from django.utils import timezone
 import quepid.models as qmodels
 from quepid.schemas import Book
@@ -8,7 +9,7 @@ from typing import List
 from ninja.pagination import paginate
 from ninja import Schema
 
-from .utils import _by_pk
+from .utils import _by_pk, _team_for_new_row
 
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,9 @@ router = Router(tags=["Books management"])
 
 class CreateBook(Schema):
     name: str
+    #: The team to share the new book with. Omitted, it is resolved from the
+    #: caller's memberships (see ``_team_for_new_row``); 0 means "no team".
+    team_id: int = None
     support_implicit_judgements: bool = False
     show_rank: bool = False
     description: str = ""
@@ -45,19 +49,39 @@ def view_book(request, book_id: int):
     
 @router.post("/", response={200: Book, 400: str})
 def create_book(request, data: CreateBook):
+    """Create a book, shared with the caller's team on the same terms as a case.
+
+    A book reaches a team through ``teams_books``, exactly as a case does
+    through ``teams_cases``, and Quepid's Books list shows the team it belongs
+    to -- so a book created without one is as stranded as a case was.
+    """
     try:
         now = timezone.now()
-        return qmodels.Books.objects.using('quepid').create(
-            name=data.name,
-            support_implicit_judgements=1 if data.support_implicit_judgements else 0,
-            show_rank=1 if data.show_rank else 0,
-            # books.archived is NOT NULL with a Rails-side default (v8.3.0+).
-            # inspectdb gives it no Django default, so Django would send NULL.
-            archived=0,
-            created_at=now,
-            updated_at=now,
-            owner_id=request.auth.id
-        )
+
+        # Resolved before anything is written, so an ambiguous or unusable team
+        # is rejected without leaving a half-built book behind.
+        team, team_error = _team_for_new_row(request.auth, data.team_id)
+        if team_error:
+            return 400, team_error
+
+        with transaction.atomic(using='quepid'):
+            book = qmodels.Books.objects.using('quepid').create(
+                name=data.name,
+                support_implicit_judgements=1 if data.support_implicit_judgements else 0,
+                show_rank=1 if data.show_rank else 0,
+                # books.archived is NOT NULL with a Rails-side default (v8.3.0+).
+                # inspectdb gives it no Django default, so Django would send NULL.
+                archived=0,
+                created_at=now,
+                updated_at=now,
+                owner_id=request.auth.id
+            )
+            if team:
+                qmodels.TeamsBooks.objects.using('quepid').create(
+                    book_id=book.id,
+                    team_id=team.id
+                )
+        return book
     except Exception as e:
         return 400, str(e)
         

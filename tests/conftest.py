@@ -314,7 +314,10 @@ def book_payload(scorer):
     Before v8.4.0 ``scorer_id`` and ``selection_strategy_id`` are required by
     ``CreateBook``; from v8.4.0 the columns behind them no longer exist.
     """
-    payload = {"name": unique("book"), "description": "fixture book"}
+    # team_id 0 keeps the book unshared: without it, a book is shared with the
+    # token owner's team whenever they have exactly one, and a suite run fills a
+    # real team with test books. Same reasoning as the `case` fixture.
+    payload = {"name": unique("book"), "description": "fixture book", "team_id": 0}
     if LEGACY_BOOKS:
         payload["scorer_id"] = scorer["id"]
         payload["selection_strategy_id"] = SELECTION_STRATEGY_ID

@@ -8,7 +8,7 @@ from quepid.schemas import Case
 from typing import List
 from ninja.pagination import paginate
 from ninja import Schema
-from .utils import _by_pk, _member_teams
+from .utils import _by_pk, _team_for_new_row
 from ninja import ModelSchema
 
 logger = logging.getLogger(__name__)
@@ -79,42 +79,6 @@ def view_cases(request, archived: bool = False):
         .exclude(archived=1)
     
     
-def _team_for_new_case(user, team_id):
-    """Decide which team a new case should be shared with.
-
-    Returns ``(team, error)``. An explicit ``team_id`` wins, provided the caller
-    is in that team. Otherwise a caller who belongs to exactly one team gets
-    that one automatically -- the common case, and the one the UI's "Share case"
-    dialog would otherwise have to be used for. A caller in no team gets an
-    unshared case, which is what Quepid does by default anyway. A caller in
-    several is asked to say which, because guessing would silently expose the
-    case to the wrong people.
-
-    ``team_id = 0`` means "no team, deliberately". Without it, automatic
-    association would leave a caller who belongs to a team no way to create an
-    unshared case at all, which is a capability Quepid itself has: every case
-    starts unshared until somebody shares it.
-    """
-    teams = _member_teams(user)
-
-    if team_id == 0:
-        return None, None
-
-    if team_id is not None:
-        team = teams.filter(pk=team_id).first()
-        if not team:
-            return None, 'Unknown team, or you are not a member of it.'
-        return team, None
-
-    candidates = list(teams)
-    if len(candidates) > 1:
-        listed = ', '.join(f'{t.id} ({t.name})' for t in candidates)
-        return None, ('You belong to more than one team -- pass team_id to say '
-                      f'which one this case belongs to. Yours: {listed}.')
-
-    return (candidates[0] if candidates else None), None
-
-
 @router.post("/", response={200: Case, 400: str})
 def create_case(request, data: CreateCase):
     try:
@@ -122,7 +86,7 @@ def create_case(request, data: CreateCase):
 
         # Resolved before anything is written, so an ambiguous or unusable team
         # is rejected without leaving a half-built case behind.
-        team, team_error = _team_for_new_case(request.auth, data.team_id)
+        team, team_error = _team_for_new_row(request.auth, data.team_id)
         if team_error:
             return 400, team_error
 

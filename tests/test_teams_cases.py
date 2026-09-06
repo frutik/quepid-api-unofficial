@@ -6,8 +6,9 @@ Three behaviours that only exist together, so they are tested together:
   ``teams``, so a team with no ``teams_members`` row is unreachable by anyone --
   it exists, and the UI's Share case dialog reports "No teams to share with";
 - every ``/teams`` endpoint answers only for teams the caller is in;
-- a case reaches a team through ``teams_cases``, written either by
-  ``create_case`` resolving a team or by ``POST /teams/{id}/cases/``.
+- a case reaches a team through ``teams_cases``, and a book through
+  ``teams_books``, written either by ``create_case`` / ``create_book``
+  resolving a team or by ``POST /teams/{id}/cases/`` and ``/books/``.
 
 Membership is asserted over HTTP rather than in SQL: because the listing is
 scoped, a team appearing in the caller's own ``GET /teams/`` *is* the assertion
@@ -31,6 +32,12 @@ def _team_ids(session):
     response = session.get(f"{BASE_URL}/teams/", timeout=30)
     assert response.status_code == 200, response.text
     return {row["id"] for row in response.json()["items"]}
+
+
+def _shared_book_ids(session, team_id):
+    response = session.get(f"{BASE_URL}/teams/{team_id}/books/", timeout=30)
+    assert response.status_code == 200, response.text
+    return {row["id"] for row in response.json()}
 
 
 def _case_count(session):
@@ -84,6 +91,19 @@ def owned_case(api, scorer, teams):
     )
     yield row
     _discard(api, f"{BASE_URL}/case/{row['id']}/")
+
+
+@pytest.fixture
+def owned_book(api, teams):
+    """A book belonging to ``api``'s user, shared with one throwaway team."""
+    home = teams()
+    row = _create(
+        api,
+        f"{BASE_URL}/books/",
+        {"name": unique("book"), "team_id": home["id"]},
+    )
+    yield row
+    _discard(api, f"{BASE_URL}/books/{row['id']}")
 
 
 # --- creating a team enrols its creator -------------------------------------
@@ -382,6 +402,134 @@ def test_unknown_team_id_is_400(api, scorer):
         timeout=30,
     )
     assert response.status_code == 400
+
+
+# --- sharing a book with a team ---------------------------------------------
+
+def test_a_new_team_has_no_books(api, teams):
+    assert _shared_book_ids(api, teams()["id"]) == set()
+
+
+def test_book_joins_the_only_team_the_caller_belongs_to(member_api, teams):
+    """Books resolve a team exactly as cases do -- same helper, same rules."""
+    if _team_ids(member_api):
+        pytest.skip("member account already belongs to a team")
+
+    only = teams(session=member_api)
+    book = _create(member_api, f"{BASE_URL}/books/", {"name": unique("book")})
+    try:
+        assert book["id"] in _shared_book_ids(member_api, only["id"])
+    finally:
+        _discard(member_api, f"{BASE_URL}/books/{book['id']}")
+
+
+def test_book_with_several_teams_and_no_team_id_is_400(member_api, teams):
+    if _team_ids(member_api):
+        pytest.skip("member account already belongs to a team")
+
+    teams(session=member_api), teams(session=member_api)
+    response = member_api.post(
+        f"{BASE_URL}/books/", json={"name": unique("book-ambiguous")}, timeout=30
+    )
+    assert response.status_code == 400
+    assert "team_id" in response.text
+
+
+def test_book_team_id_zero_opts_out_of_sharing(member_api, teams):
+    if _team_ids(member_api):
+        pytest.skip("member account already belongs to a team")
+
+    only = teams(session=member_api)
+    book = _create(
+        member_api, f"{BASE_URL}/books/", {"name": unique("book-optout"), "team_id": 0}
+    )
+    try:
+        assert book["id"] not in _shared_book_ids(member_api, only["id"])
+    finally:
+        _discard(member_api, f"{BASE_URL}/books/{book['id']}")
+
+
+def test_share_book_with_team(api, teams, owned_book):
+    other = teams()
+    response = api.post(
+        f"{BASE_URL}/teams/{other['id']}/books/",
+        json={"book_id": owned_book["id"]},
+        timeout=30,
+    )
+    assert response.status_code == 200, response.text
+    assert owned_book["id"] in _shared_book_ids(api, other["id"])
+
+
+def test_sharing_a_book_twice_is_idempotent(api, teams, owned_book):
+    """teams_books has no unique key, so a re-share would duplicate the row
+    rather than fail -- the guard is in the handler, not the schema."""
+    other = teams()
+    url = f"{BASE_URL}/teams/{other['id']}/books/"
+    payload = {"book_id": owned_book["id"]}
+
+    assert api.post(url, json=payload, timeout=30).status_code == 200
+    assert api.post(url, json=payload, timeout=30).status_code == 200
+
+    listed = [row["id"] for row in api.get(url, timeout=30).json()]
+    assert listed.count(owned_book["id"]) == 1
+
+
+def test_unshare_book_from_team(api, teams, owned_book):
+    """Exercises the raw-SQL delete: teams_books has no pk for the ORM to use."""
+    other = teams()
+    api.post(
+        f"{BASE_URL}/teams/{other['id']}/books/",
+        json={"book_id": owned_book["id"]},
+        timeout=30,
+    )
+
+    response = api.delete(
+        f"{BASE_URL}/teams/{other['id']}/books/{owned_book['id']}/", timeout=10
+    )
+    assert response.status_code == 204
+    assert owned_book["id"] not in _shared_book_ids(api, other["id"])
+    # the book itself survives
+    assert api.get(f"{BASE_URL}/books/{owned_book['id']}", timeout=10).status_code == 200
+
+
+def test_unshare_a_book_that_was_never_shared_is_404(api, teams, owned_book):
+    response = api.delete(
+        f"{BASE_URL}/teams/{teams()['id']}/books/{owned_book['id']}/", timeout=10
+    )
+    assert response.status_code == 404
+
+
+def test_cannot_share_a_book_you_do_not_own(member_api, teams, owned_book):
+    mine = teams(session=member_api)
+    response = member_api.post(
+        f"{BASE_URL}/teams/{mine['id']}/books/",
+        json={"book_id": owned_book["id"]},
+        timeout=10,
+    )
+    assert response.status_code == 400
+    assert "not owned by you" in response.text
+
+
+def test_non_member_cannot_list_a_teams_books(member_api, teams):
+    response = member_api.get(f"{BASE_URL}/teams/{teams()['id']}/books/", timeout=10)
+    assert response.status_code == 404
+
+
+def test_deleting_a_team_clears_its_book_shares(api, scorer, teams, owned_book):
+    """teams_books has no FK, so nothing in the database would clean this up."""
+    doomed = _create(api, f"{BASE_URL}/teams/", {"name": unique("team-doomed")})
+    api.post(
+        f"{BASE_URL}/teams/{doomed['id']}/books/",
+        json={"book_id": owned_book["id"]},
+        timeout=30,
+    )
+    assert api.delete(f"{BASE_URL}/teams/{doomed['id']}/", timeout=10).status_code == 204
+
+    revived = _create(api, f"{BASE_URL}/teams/", {"name": unique("team-revived")})
+    try:
+        assert _shared_book_ids(api, revived["id"]) == set()
+    finally:
+        _discard(api, f"{BASE_URL}/teams/{revived['id']}/")
 
 
 # --- authentication ----------------------------------------------------------

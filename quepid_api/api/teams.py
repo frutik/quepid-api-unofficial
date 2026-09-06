@@ -1,9 +1,9 @@
 import logging
 from ninja import Router
-from django.db import transaction
+from django.db import connections, transaction
 from django.utils import timezone
 import quepid.models as qmodels
-from quepid.schemas import Case, Team
+from quepid.schemas import Book, Case, Team
 from typing import List
 from ninja.pagination import paginate
 from ninja import Schema
@@ -24,6 +24,28 @@ class UpdateTeam(Schema):
 
 class ShareCase(Schema):
     case_id: int
+
+
+class ShareBook(Schema):
+    book_id: int
+
+
+def _shared_book_ids(team):
+    """Ids of the books shared with a team, read without touching a primary key.
+
+    ``teams_books`` has no primary key -- unlike ``teams_cases`` and
+    ``teams_members``, which declare composite ones -- so ``inspectdb`` gives
+    ``TeamsBooks`` Django's implicit ``id`` AutoField, naming a column that does
+    not exist. Any query selecting or deleting by pk dies on
+    ``Unknown column 'teams_books.id'``: that rules out ``.all()``, ``.get()``,
+    slicing the model queryset, and ``.delete()``. ``.values()`` and ``.exists()``
+    name their columns and are safe, so reads go through here and the delete
+    goes through raw SQL.
+    """
+    return qmodels.TeamsBooks.objects \
+        .using('quepid') \
+        .filter(team_id=team.id) \
+        .values('book_id')
 
 
 @router.get("/", response=List[Team])
@@ -133,6 +155,75 @@ def unshare_case_from_team(request, id: int, case_id: int):
     return (204, None) if deleted else (404, None)
 
 
+@router.get("/{id}/books/", response={200: List[Book], 404: None})
+def view_team_books(request, id: int):
+    """List the books shared with a team the caller belongs to"""
+    team = _member_team(request.auth, id)
+    if not team:
+        return 404, None
+
+    return 200, qmodels.Books.objects \
+        .using('quepid') \
+        .filter(id__in=_shared_book_ids(team)) \
+        .order_by('id')
+
+
+@router.post("/{id}/books/", response={200: Book, 404: None, 400: str})
+def share_book_with_team(request, id: int, data: ShareBook):
+    """Share one of the caller's own books with a team they belong to.
+
+    Idempotent, like the case equivalent -- though for a different reason:
+    ``teams_books`` carries no unique key at all, so a re-share would silently
+    duplicate the row rather than fail.
+    """
+    team = _member_team(request.auth, id)
+    if not team:
+        return 404, None
+
+    book = qmodels.Books.objects \
+        .using('quepid') \
+        .filter(pk=data.book_id) \
+        .filter(owner_id=request.auth.id) \
+        .first()
+    if not book:
+        return 400, 'Unknown book, or not owned by you.'
+
+    already_shared = qmodels.TeamsBooks.objects \
+        .using('quepid') \
+        .filter(team_id=team.id) \
+        .filter(book_id=book.id) \
+        .exists()
+    if not already_shared:
+        qmodels.TeamsBooks.objects.using('quepid').create(
+            book_id=book.id,
+            team_id=team.id
+        )
+    return 200, book
+
+
+@router.delete("/{id}/books/{book_id}/", response={204: None, 404: None})
+def unshare_book_from_team(request, id: int, book_id: int):
+    """Stop sharing a book with a team, leaving the book itself untouched"""
+    team = _member_team(request.auth, id)
+    if not team:
+        return 404, None
+
+    if not qmodels.TeamsBooks.objects \
+            .using('quepid') \
+            .filter(team_id=team.id) \
+            .filter(book_id=book_id) \
+            .exists():
+        return 404, None
+
+    # Raw SQL, unlike the teams_cases equivalent: see _shared_book_ids.
+    with connections['quepid'].cursor() as cursor:
+        cursor.execute(
+            'DELETE FROM teams_books WHERE team_id = %s AND book_id = %s',
+            [team.id, book_id],
+        )
+    return 204, None
+
+
 @router.put("/{id}/", response={200: Team, 404: None, 400: str})
 def update_team(request, id: int, data: UpdateTeam):
     """Update an existing team"""
@@ -161,5 +252,10 @@ def delete_team(request, id: int):
     with transaction.atomic(using='quepid'):
         for join in (qmodels.TeamsMembers, qmodels.TeamsCases, qmodels.TeamsScorers):
             join.objects.using('quepid').filter(team_id=team.id).delete()
+        # teams_books has no FK to block the delete, but leaving its rows behind
+        # would hand a later team the books of a deleted one. Raw SQL because it
+        # has no primary key either -- see _shared_book_ids.
+        with connections['quepid'].cursor() as cursor:
+            cursor.execute('DELETE FROM teams_books WHERE team_id = %s', [team.id])
         team.delete(using='quepid')
     return 204, None

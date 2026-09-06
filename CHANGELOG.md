@@ -47,6 +47,16 @@ observe.
   owner-only — being able to see a case because someone shared it with you does
   not let you pass it on — and the `POST` is idempotent, `teams_cases` being
   keyed on `(case_id, team_id)`.
+- **Books get the same team treatment as cases.** `POST /api/books/` takes the
+  same optional `team_id` and resolves it the same way, and `GET`, `POST` and
+  `DELETE` on `/api/teams/{id}/books/` list, share and unshare a book. A book
+  reaches a team through `teams_books`, which nothing here wrote either, so a
+  book created through the API belonged to nobody's team. Note `teams_books`
+  has **no primary key and no foreign keys** — unlike `teams_cases` — so
+  `TeamsBooks` carries Django's phantom `id` AutoField and any query touching a
+  pk dies on `Unknown column 'teams_books.id'`; reads go through `.values()`
+  and the unshare through raw SQL. `DELETE /api/teams/{id}/` now clears these
+  rows too, since no constraint would.
 - **`POST /api/case/` picks the team for you when there is no ambiguity.** A
   caller who belongs to exactly one team gets the case shared with it without
   passing `team_id`; a caller in none gets an unshared case, as before. A caller
